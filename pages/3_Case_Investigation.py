@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 from utils.audit_logger import log_action
 from utils.model_loader import load_models
-from utils.shap_explainer import get_shap_explanation
+from utils.shap_explainer import get_model_xai_explanation
 
 st.title("3. Case Investigation")
 
@@ -60,8 +60,8 @@ with d2:
         unsafe_allow_html=True,
     )
 
-st.subheader("SHAP Explainability")
-rf_model, _ = load_models()
+st.subheader("Model Explainability (CART + Logistic)")
+rf_model, cart_model, logit_model = load_models()
 
 base_features = [
     "amount_log",
@@ -99,7 +99,7 @@ idx = rows.index[0]
 row_for_shap = x.loc[[idx]].copy()
 
 try:
-    top_features, plain_text, bullets = get_shap_explanation(rf_model, row_for_shap, list(x.columns))
+    top_features, plain_text, bullets = get_model_xai_explanation(cart_model, logit_model, row_for_shap, list(x.columns))
 except Exception:
     top_features = [("amount_log", 0.0), ("cross_border", 0.0), ("cross_currency", 0.0)]
     plain_text = "This transaction was flagged primarily due to a combination of network and transaction risk indicators."
@@ -112,7 +112,7 @@ plot_df = plot_df.sort_values("shap_value", key=lambda s: s.abs(), ascending=Tru
 
 fig, ax = plt.subplots(figsize=(8, 3.5))
 ax.barh(plot_df["feature"], plot_df["shap_value"], color="#42a5f5")
-ax.set_xlabel("SHAP value contribution")
+ax.set_xlabel("Combined contribution (CART importance + Logistic local effect)")
 ax.set_ylabel("Feature")
 st.pyplot(fig)
 

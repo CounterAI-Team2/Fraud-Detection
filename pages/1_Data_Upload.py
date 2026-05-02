@@ -40,7 +40,7 @@ if uploaded is not None:
 
     feat = engineer_features(raw)
 
-    rf_model, cart_model = load_models()
+    rf_model, _, _ = load_models()
 
     base_features = ENGINEERED_FEATURES + [
         "Payment_type",
@@ -66,6 +66,7 @@ if uploaded is not None:
     rf_cols = list(rf_model.feature_names_in_)
     x_rf = x.reindex(columns=rf_cols, fill_value=0)
 
+    # RF is the sole risk scorer for alerting.
     feat["risk_score"] = rf_model.predict_proba(x_rf)[:, 1]
     feat["risk_tier"] = feat["risk_score"].apply(_tier)
 

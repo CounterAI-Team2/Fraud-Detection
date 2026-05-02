@@ -18,6 +18,7 @@ This MVP uses **pretrained models** and a **five-page Streamlit workflow**:
 - `utils/str_builder.py`
 - `models/rf_model.pkl`
 - `models/cart_model.pkl`
+- `models/logit_model.pkl`
 - `data/audit_log.csv` (append-only, auto-created)
 
 ## Run
