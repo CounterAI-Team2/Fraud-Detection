@@ -1,32 +1,53 @@
 # CounterAI MVP 0.1
 
-This MVP is now **upload-driven** and supports the complete AML workflow:
+The platform now works as **inference-only** for users:
+
+- Models are pretrained from Assignment 2 data in this folder (`SAML-D.csv`)
+- Users upload a **new dataset**
+- Platform flags possible money laundering cases and shows full AML workflow output
+
+## Workflow Covered
 
 - KYC profiling
-- Transaction monitoring with AI risk score
-- Explainable AI rationale per flagged case
-- Investigation queue and CDD level determination
-- Dashboard metrics for management reporting
-
-Your original R implementation is preserved as model/feature engineering reference under `R/`.
-The primary client-facing MVP is implemented in Python + Streamlit.
+- Transaction monitoring
+- Explainable AI rationale
+- AI risk score and risk band
+- Investigation queue + CDD level
+- Dashboard summary metrics
 
 ## Main App (Python)
 
-- `python_app/streamlit_app.py`: UI for uploading datasets and running the full AML flow
-- `python_app/aml_pipeline.py`: engineered features + model training/scoring + KYC/CDD/dashboard transforms
-- `requirements.txt`: Python dependencies
-- `scripts/run_python_mvp.sh`: one-command local run script
+- `python_app/streamlit_app.py`: upload-driven UI (scoring only)
+- `python_app/aml_pipeline.py`: feature engineering + inference pipeline
+- `python_app/train_pretrained_models.py`: one-time model training/persistence
+- `models/aml_models.joblib`: pretrained model bundle
 
-## Dataset Inputs
+## One-time Model Training
 
-### 1. Training dataset
-Must include all transactional columns plus `Is_laundering` target.
+```bash
+cd /Users/saikalepu/Documents/BCG/CCAs/CounterAI-Neumann/counterai-mvp
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python python_app/train_pretrained_models.py
+```
 
-### 2. Scoring dataset
-Must include transactional columns (target optional) and is used for case flagging.
+Default training source:
 
-Required transaction columns:
+- `/Users/saikalepu/Documents/BCG/CCAs/CounterAI-Neumann/SAML-D.csv`
+
+## Run the Platform
+
+```bash
+cd /Users/saikalepu/Documents/BCG/CCAs/CounterAI-Neumann/counterai-mvp
+./scripts/run_python_mvp.sh
+```
+
+Then open:
+
+- `http://127.0.0.1:5173`
+
+Users only need to upload a scoring CSV with these columns:
 
 - `Time`
 - `Date`
@@ -39,32 +60,6 @@ Required transaction columns:
 - `Receiver_bank_location`
 - `Payment_type`
 
-## Run Python MVP UI
+## R Reference
 
-```bash
-cd /Users/saikalepu/Documents/BCG/CCAs/CounterAI-Neumann/counterai-mvp
-./scripts/run_python_mvp.sh
-```
-
-Then open `http://127.0.0.1:5173`.
-
-## Assignment 2 Data Packaging
-
-You can generate client-friendly sample datasets from your Assignment 2 `SAML-D.csv`:
-
-```bash
-Rscript scripts/prepare_client_data.R
-```
-
-This creates:
-
-- `data/demo/aml_demo_data.csv` (for presentation)
-- `data/pilot/aml_pilot_data.csv` (for pilot testing)
-
-## Legacy R MVP
-
-R implementation remains available for reference and comparison:
-
-- `app.R`
-- `mvp_run_demo.R`
-- `R/` modules
+Your original R implementation is preserved for reference under `R/` and `app.R`.

@@ -12,3 +12,5 @@ output/model_bundle.rds
 
 __pycache__/
 *.pyc
+
+.venv/

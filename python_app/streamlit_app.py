@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import io
+from pathlib import Path
 
+import joblib
 import pandas as pd
 import streamlit as st
 
@@ -11,24 +13,34 @@ from aml_pipeline import (
     build_dashboard,
     build_kyc_view,
     score_transactions,
-    train_models,
     validate_dataset,
 )
+
+MODEL_PATH = Path("models/aml_models.joblib")
 
 st.set_page_config(page_title="CounterAI MVP 0.1", layout="wide")
 st.title("CounterAI MVP 0.1 - End-to-End AML Workflow")
 
 st.markdown(
-    "Upload training data (with `Is_laundering`) and monitoring data, then run the full flow: KYC -> Transaction Monitoring -> XAI -> CDD Investigation -> Dashboard."
+    "Upload a new dataset and flag possible money laundering cases using pretrained models from Assignment 2 data."
 )
 
 with st.sidebar:
     st.header("Inputs")
-    train_file = st.file_uploader("Training dataset CSV (must include Is_laundering)", type=["csv"])
-    score_file = st.file_uploader("Scoring dataset CSV (for flagging cases)", type=["csv"])
+    score_file = st.file_uploader("Scoring dataset CSV", type=["csv"])
     score_threshold_medium = st.slider("Medium risk threshold", 0.1, 0.9, 0.5, 0.01)
     score_threshold_high = st.slider("High risk threshold", 0.5, 0.99, 0.8, 0.01)
     run_btn = st.button("Run Full AML Flow", type="primary")
+
+
+@st.cache_resource
+def load_models():
+    if not MODEL_PATH.exists():
+        raise FileNotFoundError(
+            f"Pretrained model bundle not found at {MODEL_PATH}. "
+            "Run: python python_app/train_pretrained_models.py"
+        )
+    return joblib.load(MODEL_PATH)
 
 
 def _read_csv(uploaded) -> pd.DataFrame:
@@ -36,21 +48,17 @@ def _read_csv(uploaded) -> pd.DataFrame:
 
 
 if run_btn:
-    if train_file is None or score_file is None:
-        st.error("Please upload both training and scoring CSV files.")
+    if score_file is None:
+        st.error("Please upload a scoring CSV file.")
         st.stop()
 
     try:
-        train_df = _read_csv(train_file)
         score_df = _read_csv(score_file)
-
-        validate_dataset(train_df, require_target=True)
         validate_dataset(score_df, require_target=False)
 
-        models, metrics = train_models(train_df)
+        models = load_models()
         scored = score_transactions(score_df, models)
 
-        # Apply user-selected thresholds for presentation flexibility.
         scored["risk_band"] = "LOW"
         scored.loc[scored["ai_risk_score"] >= score_threshold_medium, "risk_band"] = "MEDIUM"
         scored.loc[scored["ai_risk_score"] >= score_threshold_high, "risk_band"] = "HIGH"
@@ -61,15 +69,12 @@ if run_btn:
         cdd_df = build_cdd_cases(scored)
         dashboard_df = build_dashboard(scored, cdd_df)
 
-        st.success("AML flow completed.")
+        st.success("AML flow completed with pretrained models.")
 
         col1, col2, col3 = st.columns(3)
         col1.metric("Flagged Cases", int(scored["flagged_case"].sum()))
         col2.metric("High Risk", int((scored["risk_band"] == "HIGH").sum()))
         col3.metric("STR Required", int(cdd_df["str_required"].sum()) if not cdd_df.empty else 0)
-
-        st.subheader("Model Training Summary")
-        st.json(metrics)
 
         tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
             [
@@ -141,6 +146,7 @@ if run_btn:
         st.error(f"Run failed: {exc}")
 
 else:
-    st.info("Upload files and click 'Run Full AML Flow' to start.")
+    st.info("Upload a dataset and click 'Run Full AML Flow' to start.")
     st.markdown("**Expected columns**")
-    st.code("\n".join(REQUIRED_COLUMNS + ["Is_laundering (training only)"]))
+    st.code("\n".join(REQUIRED_COLUMNS))
+    st.caption("Model source: pretrained bundle from Assignment 2 dataset in project folder.")
