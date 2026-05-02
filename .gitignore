@@ -9,3 +9,6 @@ renv/staging/
 output/*.md
 output/*.csv
 output/model_bundle.rds
+
+__pycache__/
+*.pyc
