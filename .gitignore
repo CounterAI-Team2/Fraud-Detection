@@ -1,0 +1,10 @@
+.Rhistory
+.RData
+.Rproj.user/
+renv/library/
+renv/staging/
+*.sqlite
+.Rlibs/
+output/*.md
+output/*.csv
+output/model_bundle.rds
