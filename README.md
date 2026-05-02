@@ -1,55 +1,63 @@
 # CounterAI MVP 0.1
 
-This repository implements MVP 0.1 of the AML architecture:
+CounterAI MVP 0.1 now includes:
 
-- KYC onboarding with simple sanctions/risk profiling
-- Transaction monitoring with AI risk scoring (Random Forest + CART + Logistic Regression)
-- Alert queue and investigation routing (dismiss/escalate)
-- CDD level determination with model rationale
-- STR draft generation from template
-- Management dashboard metrics (audit log, alert summary, STR filing rate)
+- End-to-end AML backend flow (KYC -> scoring -> alerts -> CDD -> STR draft -> dashboard metrics)
+- Shiny user interface for client presentation and pilot testing
+- Assignment 2 AML data packaged into:
+  - `data/demo/aml_demo_data.csv` (presentation dataset)
+  - `data/pilot/aml_pilot_data.csv` (pilot testing dataset)
 
 ## Project Structure
 
-- `R/`: feature engineering, model training/scoring, and service modules
-- `mvp_run_demo.R`: runs an end-to-end MVP scenario
+- `app.R`: Shiny UI for operating MVP 0.1
+- `R/`: feature engineering, model training/scoring, service modules
+- `scripts/prepare_client_data.R`: generates demo and pilot datasets from `SAML-D.csv`
+- `mvp_run_demo.R`: CLI end-to-end run (non-UI)
 - `templates/str_template.md`: STR draft template
-- `output/`: generated run artifacts
 
 ## Prerequisites
 
-Install R packages (project-local library):
+Use a project-local library:
 
 ```r
 dir.create(".Rlibs", showWarnings = FALSE)
 .libPaths(c(".Rlibs", .libPaths()))
-install.packages(c("DBI", "RSQLite", "randomForest", "rpart"), lib = ".Rlibs")
+install.packages(c("DBI", "RSQLite", "randomForest", "rpart", "shiny"), lib = ".Rlibs")
 ```
 
-Optional (for plotting and EDA extensions): `ggplot2`, `scales`, `rpart.plot`.
+## Prepare Client Data
 
-## Run MVP Demo
+From project root:
 
 ```bash
-cd counterai-mvp
-Rscript mvp_run_demo.R
+Rscript scripts/prepare_client_data.R
 ```
 
-If your dataset path differs:
+By default this reads:
+
+`/Users/saikalepu/Documents/BCG/CCAs/CounterAI-Neumann/SAML-D.csv`
+
+Or override:
 
 ```bash
-SAML_DATA_PATH=/absolute/path/to/SAML-D.csv Rscript mvp_run_demo.R
+SAML_DATA_PATH=/absolute/path/to/SAML-D.csv Rscript scripts/prepare_client_data.R
 ```
 
-## GitHub Setup
-
-Local git repo is initialized. To create and push to GitHub:
+## Run UI (Client Demo / Pilot)
 
 ```bash
-git add .
-git commit -m "Initialize CounterAI MVP 0.1"
-git branch -M main
-gh repo create counterai-mvp --private --source=. --remote=origin --push
+Rscript -e '.libPaths(c(".Rlibs", .libPaths())); shiny::runApp(".", host="127.0.0.1", port=5173)'
 ```
 
-If `gh` is not authenticated, run `gh auth login` first.
+In the UI:
+
+- Choose **Demo** or **Pilot** dataset mode
+- Click **Run MVP Flow**
+- Review Dashboard, Scored Transactions, CDD, STR, and Audit Log tabs
+
+## CLI MVP Run (Optional)
+
+```bash
+Rscript -e '.libPaths(c(".Rlibs", .libPaths())); source("mvp_run_demo.R")'
+```

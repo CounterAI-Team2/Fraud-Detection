@@ -1,4 +1,5 @@
 .Rhistory
+.DS_Store
 .RData
 .Rproj.user/
 renv/library/
