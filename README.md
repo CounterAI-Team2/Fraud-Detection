@@ -1,63 +1,70 @@
 # CounterAI MVP 0.1
 
-CounterAI MVP 0.1 now includes:
+This MVP is now **upload-driven** and supports the complete AML workflow:
 
-- End-to-end AML backend flow (KYC -> scoring -> alerts -> CDD -> STR draft -> dashboard metrics)
-- Shiny user interface for client presentation and pilot testing
-- Assignment 2 AML data packaged into:
-  - `data/demo/aml_demo_data.csv` (presentation dataset)
-  - `data/pilot/aml_pilot_data.csv` (pilot testing dataset)
+- KYC profiling
+- Transaction monitoring with AI risk score
+- Explainable AI rationale per flagged case
+- Investigation queue and CDD level determination
+- Dashboard metrics for management reporting
 
-## Project Structure
+Your original R implementation is preserved as model/feature engineering reference under `R/`.
+The primary client-facing MVP is implemented in Python + Streamlit.
 
-- `app.R`: Shiny UI for operating MVP 0.1
-- `R/`: feature engineering, model training/scoring, service modules
-- `scripts/prepare_client_data.R`: generates demo and pilot datasets from `SAML-D.csv`
-- `mvp_run_demo.R`: CLI end-to-end run (non-UI)
-- `templates/str_template.md`: STR draft template
+## Main App (Python)
 
-## Prerequisites
+- `python_app/streamlit_app.py`: UI for uploading datasets and running the full AML flow
+- `python_app/aml_pipeline.py`: engineered features + model training/scoring + KYC/CDD/dashboard transforms
+- `requirements.txt`: Python dependencies
+- `scripts/run_python_mvp.sh`: one-command local run script
 
-Use a project-local library:
+## Dataset Inputs
 
-```r
-dir.create(".Rlibs", showWarnings = FALSE)
-.libPaths(c(".Rlibs", .libPaths()))
-install.packages(c("DBI", "RSQLite", "randomForest", "rpart", "shiny"), lib = ".Rlibs")
+### 1. Training dataset
+Must include all transactional columns plus `Is_laundering` target.
+
+### 2. Scoring dataset
+Must include transactional columns (target optional) and is used for case flagging.
+
+Required transaction columns:
+
+- `Time`
+- `Date`
+- `Sender_account`
+- `Receiver_account`
+- `Amount`
+- `Payment_currency`
+- `Received_currency`
+- `Sender_bank_location`
+- `Receiver_bank_location`
+- `Payment_type`
+
+## Run Python MVP UI
+
+```bash
+cd /Users/saikalepu/Documents/BCG/CCAs/CounterAI-Neumann/counterai-mvp
+./scripts/run_python_mvp.sh
 ```
 
-## Prepare Client Data
+Then open `http://127.0.0.1:5173`.
 
-From project root:
+## Assignment 2 Data Packaging
+
+You can generate client-friendly sample datasets from your Assignment 2 `SAML-D.csv`:
 
 ```bash
 Rscript scripts/prepare_client_data.R
 ```
 
-By default this reads:
+This creates:
 
-`/Users/saikalepu/Documents/BCG/CCAs/CounterAI-Neumann/SAML-D.csv`
+- `data/demo/aml_demo_data.csv` (for presentation)
+- `data/pilot/aml_pilot_data.csv` (for pilot testing)
 
-Or override:
+## Legacy R MVP
 
-```bash
-SAML_DATA_PATH=/absolute/path/to/SAML-D.csv Rscript scripts/prepare_client_data.R
-```
+R implementation remains available for reference and comparison:
 
-## Run UI (Client Demo / Pilot)
-
-```bash
-Rscript -e '.libPaths(c(".Rlibs", .libPaths())); shiny::runApp(".", host="127.0.0.1", port=5173)'
-```
-
-In the UI:
-
-- Choose **Demo** or **Pilot** dataset mode
-- Click **Run MVP Flow**
-- Review Dashboard, Scored Transactions, CDD, STR, and Audit Log tabs
-
-## CLI MVP Run (Optional)
-
-```bash
-Rscript -e '.libPaths(c(".Rlibs", .libPaths())); source("mvp_run_demo.R")'
-```
+- `app.R`
+- `mvp_run_demo.R`
+- `R/` modules
