@@ -23,7 +23,7 @@ view["Dismiss_Reason"] = view["transaction_id"].map(lambda x: status_map.get(x, 
 st.subheader("Filters")
 colf1, colf2, colf3, colf4 = st.columns(4)
 with colf1:
-    tiers = st.multiselect("Risk Tier", ["Critical", "High", "Medium", "Low"], default=["Critical", "High", "Medium"])
+    tiers = st.multiselect("Risk Tier", ["Critical", "Low"], default=["Critical"])
 with colf2:
     payment_types = sorted(view["Payment_type"].astype(str).unique().tolist())
     selected_pt = st.multiselect("Payment Type", payment_types, default=payment_types)
@@ -74,7 +74,7 @@ for _, row in view.head(200).iterrows():
         c2.write(f"Receiver: `{row['Receiver_account']}`")
         c3.write(f"Amount: `{row['Amount']:,.2f}`")
         c4.write(f"Type: `{row['Payment_type']}`")
-        c5.write(f"Risk Score: `{row['risk_score']:.4f}`")
+        c5.write(f"RF Decision: `{'Flagged' if int(row['risk_score']) == 1 else 'Not flagged'}`")
 
         if status == "Dismissed":
             st.caption(f"Dismiss reason: {status_map.get(txid, {}).get('reason', '')}")
@@ -93,7 +93,7 @@ for _, row in view.head(200).iterrows():
             log_action(
                 action="alert_dismissed",
                 transaction_id=txid,
-                details=f"risk_score={row['risk_score']:.4f}; reason={dismiss_reason}",
+                details=f"rf_prediction={int(row['risk_score'])}; reason={dismiss_reason}",
                 analyst_id=analyst_id,
             )
             st.rerun()

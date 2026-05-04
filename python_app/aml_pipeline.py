@@ -116,18 +116,48 @@ def train_models(df: pd.DataFrame, random_state: int = 147) -> Tuple[TrainedMode
         x, y, test_size=0.3, random_state=random_state, stratify=y if y.nunique() > 1 else None
     )
 
+    train_bal = pd.concat([x_train, y_train.rename("target")], axis=1)
+    minority = train_bal[train_bal["target"] == 1]
+    majority = train_bal[train_bal["target"] == 0]
+
+    if not minority.empty and len(majority) > len(minority):
+        majority = majority.sample(n=len(minority), random_state=random_state)
+        train_bal = pd.concat([majority, minority], axis=0).sample(frac=1, random_state=random_state)
+
+    y_train_bal = train_bal["target"].astype(int)
+    x_train_bal = train_bal.drop(columns=["target"])
+
     rf = RandomForestClassifier(n_estimators=200, random_state=random_state, class_weight="balanced")
     cart = DecisionTreeClassifier(max_depth=8, random_state=random_state, class_weight="balanced")
     logit = LogisticRegression(max_iter=600, class_weight="balanced")
 
-    rf.fit(x_train, y_train)
-    cart.fit(x_train, y_train)
-    logit.fit(x_train, y_train)
+    rf.fit(x_train_bal, y_train_bal)
+    cart.fit(x_train_bal, y_train_bal)
+    logit.fit(x_train_bal, y_train_bal)
+
+    rf_pred = rf.predict(x_test)
+    cart_pred = cart.predict(x_test)
+    logit_pred = logit.predict(x_test)
+
+    def recall(pred: np.ndarray) -> float:
+        positives = int((y_test == 1).sum())
+        if positives == 0:
+            return 0.0
+        return float(((pred == 1) & (y_test == 1)).sum() / positives)
+
+    def flagged_rate(pred: np.ndarray) -> float:
+        return float((pred == 1).mean())
 
     metrics = {
         "rf_test_accuracy": float(rf.score(x_test, y_test)),
         "cart_test_accuracy": float(cart.score(x_test, y_test)),
         "logit_test_accuracy": float(logit.score(x_test, y_test)),
+        "rf_test_recall": recall(rf_pred),
+        "cart_test_recall": recall(cart_pred),
+        "logit_test_recall": recall(logit_pred),
+        "rf_flagged_rate": flagged_rate(rf_pred),
+        "balanced_train_rows": int(len(x_train_bal)),
+        "balanced_train_positives": int((y_train_bal == 1).sum()),
     }
 
     models = TrainedModels(

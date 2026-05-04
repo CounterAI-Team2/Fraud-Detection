@@ -20,7 +20,11 @@ if scored_df is None:
 selected_txn_id = st.session_state.get("selected_txn_id")
 if selected_txn_id is None:
     st.warning("No transaction selected from Alert Queue.")
-    tx_options = scored_df["transaction_id"].astype(str).tolist()
+    flagged_options = scored_df[scored_df["risk_score"].astype(int) == 1]
+    if flagged_options.empty:
+        st.info("No RF-flagged transactions are available for investigation.")
+        st.stop()
+    tx_options = flagged_options["transaction_id"].astype(str).tolist()
     selected_txn_id = st.selectbox("Select transaction", tx_options)
 
 rows = scored_df[scored_df["transaction_id"].astype(str) == str(selected_txn_id)]
@@ -30,13 +34,13 @@ if rows.empty:
 
 selected_txn = rows.iloc[0]
 
-score = float(selected_txn["risk_score"])
-if score >= 0.85:
+score = int(selected_txn["risk_score"])
+if score != 1:
+    st.warning("Explainable AI is only generated for RF-flagged transactions.")
+    st.stop()
+
+if score == 1:
     tier_color = "#f44336"
-elif score >= 0.65:
-    tier_color = "#fb8c00"
-elif score >= 0.40:
-    tier_color = "#fdd835"
 else:
     tier_color = "#cfd8dc"
 
@@ -55,7 +59,7 @@ with d1:
     st.write(f"Received Currency: `{selected_txn['Received_currency']}`")
 with d2:
     st.markdown(
-        f"<div style='font-size:36px;font-weight:700;color:{tier_color}'>{score:.4f}</div>"
+        f"<div style='font-size:28px;font-weight:700;color:{tier_color}'>{'Flagged' if score == 1 else 'Not flagged'}</div>"
         f"<div style='padding:6px;border-radius:8px;background:{tier_color};color:black;font-weight:700'>{selected_txn['risk_tier']}</div>",
         unsafe_allow_html=True,
     )
@@ -158,7 +162,7 @@ if c1.button("Escalate to STR", disabled=not escalate_enabled):
         "receiver_account": str(selected_txn["Receiver_account"]),
         "amount": float(selected_txn["Amount"]),
         "payment_type": str(selected_txn["Payment_type"]),
-        "risk_score": float(selected_txn["risk_score"]),
+        "risk_score": int(selected_txn["risk_score"]),
         "risk_tier": str(selected_txn["risk_tier"]),
         "cdd_level": cdd_level,
         "investigation_notes": notes,

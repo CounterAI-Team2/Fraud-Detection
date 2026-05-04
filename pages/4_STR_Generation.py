@@ -29,7 +29,7 @@ sender_details = st.text_input("Sender Details", value=f"Account {str_case['send
 receiver_details = st.text_input("Receiver Details", value=f"Account {str_case['receiver_account']}")
 amount = st.text_input("Transaction Amount", value=f"{str_case['amount']:,.2f}")
 payment_method = st.text_input("Payment Method", value=str_case["payment_type"])
-ai_summary = st.text_input("AI Risk Summary", value=f"{str_case['risk_score']:.4f} - {str_case['risk_tier']}")
+ai_summary = st.text_input("AI Flagging Summary", value=f"RF decision: {'Flagged' if int(str_case['risk_score']) == 1 else 'Not flagged'} - {str_case['risk_tier']}")
 cdd_level = st.text_input("CDD Level Applied", value=str_case["cdd_level"])
 
 default_grounds = build_default_grounds(str_case)
@@ -55,7 +55,7 @@ if c2.button("Approve and File"):
             {
                 "reference_number": ref_no,
                 "transaction_id": str_case["transaction_id"],
-                "risk_score": str_case["risk_score"],
+                "rf_prediction": str_case["risk_score"],
                 "cdd_level": str_case["cdd_level"],
                 "filed_by": analyst_id,
                 "report_date": str(report_date),
@@ -65,7 +65,7 @@ if c2.button("Approve and File"):
         log_action(
             action="str_filed",
             transaction_id=str_case["transaction_id"],
-            details=f"reference_number={ref_no}; risk_score={str_case['risk_score']:.4f}; cdd_level={str_case['cdd_level']}",
+            details=f"reference_number={ref_no}; rf_prediction={int(str_case['risk_score'])}; cdd_level={str_case['cdd_level']}",
             analyst_id=analyst_id,
         )
 
@@ -80,7 +80,7 @@ st.markdown(
 - **Receiver:** {receiver_details}
 - **Amount:** {amount}
 - **Payment Method:** {payment_method}
-- **AI Risk:** {ai_summary}
+- **AI Flagging:** {ai_summary}
 - **CDD Level:** {cdd_level}
 
 **Grounds for Suspicion**

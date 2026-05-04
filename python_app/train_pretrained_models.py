@@ -20,7 +20,7 @@ def main() -> None:
         "--train-fraction",
         type=float,
         default=0.7,
-        help="Fraction of dataset used for model training input generation.",
+        help="Training fraction. The current trainer uses a 70/30 train/test split internally.",
     )
     parser.add_argument(
         "--out",
@@ -29,8 +29,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if args.train_fraction <= 0 or args.train_fraction > 1:
-        raise ValueError("train-fraction must be in (0, 1]")
+    if args.train_fraction != 0.7:
+        raise ValueError("This MVP trainer currently supports the required 70/30 split only.")
 
     train_path = Path(args.train_data)
     if not train_path.exists():
@@ -39,13 +39,10 @@ def main() -> None:
     print(f"Loading training data from {train_path}")
     df = pd.read_csv(train_path)
     print(f"Total rows in source: {len(df)}")
-
-    n_train = int(len(df) * args.train_fraction)
-    df_train = df.sample(n=n_train, random_state=147)
-    print(f"Rows used for training ({args.train_fraction:.0%}): {len(df_train)}")
+    print("Rows used by trainer: full dataset, with internal 70/30 split")
 
     print("Training models (RF/CART/Logit)...")
-    models, metrics = train_models(df_train)
+    models, metrics = train_models(df)
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
