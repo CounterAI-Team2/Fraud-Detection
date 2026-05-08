@@ -5,15 +5,15 @@ import streamlit as st
 
 from utils.aml_services import apply_sanctions_screening, clear_sanctions_flag, sync_customer_profiles
 from utils.audit_logger import log_action
+from utils.constants import CUSTOMER_RECENT_TXNS_LIMIT
 from utils.data_store import get_customers
+from utils.session_utils import get_current_analyst, require_scored_df
 
 st.title("6. KYC & Screening")
 st.caption("Customer profile review, KYC risk tiering, and sanctions screening workflow.")
 
-scored_df = st.session_state.get("scored_df")
-if scored_df is None:
-    st.error("Upload and score a dataset before opening KYC & Screening.")
-    st.stop()
+require_scored_df()
+scored_df = st.session_state["scored_df"]
 
 customers = sync_customer_profiles(scored_df)
 customers = apply_sanctions_screening(customers)
@@ -22,8 +22,7 @@ if customers.empty:
     st.stop()
 
 customers = get_customers()
-actor_id = st.session_state.get("current_actor_id", "Analyst")
-actor_role = st.session_state.get("current_actor_role", "Admin")
+actor_id, actor_role = get_current_analyst()
 
 filter_col1, filter_col2, filter_col3 = st.columns(3)
 with filter_col1:
@@ -142,7 +141,7 @@ st.dataframe(
             "risk_score",
             "risk_tier",
         ]
-    ].head(25),
+    ].head(CUSTOMER_RECENT_TXNS_LIMIT),
     use_container_width=True,
 )
 

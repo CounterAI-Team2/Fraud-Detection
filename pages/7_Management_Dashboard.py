@@ -4,16 +4,15 @@ import pandas as pd
 import streamlit as st
 
 from utils.aml_services import build_dashboard_metrics, ensure_scored_defaults
+from utils.constants import TREND_HISTORICAL_DAYS
 from utils.data_store import get_archive, get_cases, get_hitl_feedback
+from utils.session_utils import require_scored_df
 
 st.title("7. Management Dashboard")
 st.caption("Operational KPIs for alerts, cases, STR throughput, and customer risk posture.")
 
-scored_df = st.session_state.get("scored_df")
-if scored_df is None:
-    st.error("Upload and score a dataset before opening the dashboard.")
-    st.stop()
-
+require_scored_df()
+scored_df = st.session_state["scored_df"]
 scored_df = ensure_scored_defaults(scored_df)
 metrics = build_dashboard_metrics(scored_df)
 
@@ -61,7 +60,7 @@ if not hitl.empty:
 if trend_df.empty:
     st.info("Trend data will populate after STR archives and HITL feedback are recorded.")
 else:
-    trend_df = trend_df.fillna(0).sort_index().tail(30)
+    trend_df = trend_df.fillna(0).sort_index().tail(TREND_HISTORICAL_DAYS)
     st.line_chart(trend_df)
 
 st.subheader("Current Model Summary")

@@ -11,24 +11,15 @@ ensure_model_registry_entry()
 
 st.title("CounterAI AML Platform - Roadmap Build")
 
-if "scored_df" not in st.session_state:
-    st.session_state["scored_df"] = None
-if "alert_status" not in st.session_state:
-    st.session_state["alert_status"] = {}
-if "selected_txn_id" not in st.session_state:
-    st.session_state["selected_txn_id"] = None
-if "str_case" not in st.session_state:
-    st.session_state["str_case"] = None
-if "str_log" not in st.session_state:
-    st.session_state["str_log"] = []
-if "selected_case_id" not in st.session_state:
-    st.session_state["selected_case_id"] = None
-if "current_actor_id" not in st.session_state:
-    st.session_state["current_actor_id"] = "Analyst"
-if "current_actor_role" not in st.session_state:
-    st.session_state["current_actor_role"] = "Admin"
-if "current_str_id" not in st.session_state:
-    st.session_state["current_str_id"] = None
+_DEFAULTS = {
+    "scored_df": None, "alert_status": {}, "selected_txn_id": None,
+    "str_case": None,  "str_log": [],     "selected_case_id": None,
+    "current_actor_id": "Analyst", "current_actor_role": "Admin",
+    "current_str_id": None,
+}
+for _k, _v in _DEFAULTS.items():
+    if _k not in st.session_state:
+        st.session_state[_k] = _v
 
 with st.sidebar:
     st.subheader("Session Controls")

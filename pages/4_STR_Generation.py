@@ -7,6 +7,7 @@ import streamlit as st
 from utils.aml_services import archive_str_case, build_archive_search_view, upsert_str_workflow
 from utils.audit_logger import log_action
 from utils.data_store import get_str_cases
+from utils.session_utils import get_current_analyst
 from utils.str_builder import build_default_grounds, make_reference_number
 
 st.title("4. STR Generation")
@@ -16,8 +17,7 @@ if "str_case" not in st.session_state or st.session_state["str_case"] is None:
     st.stop()
 
 str_case = st.session_state["str_case"]
-actor_id = st.session_state.get("current_actor_id", "Analyst")
-actor_role = st.session_state.get("current_actor_role", "Admin")
+actor_id, actor_role = get_current_analyst()
 
 str_cases = get_str_cases()
 existing_str = None

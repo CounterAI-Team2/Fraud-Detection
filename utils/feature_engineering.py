@@ -29,6 +29,14 @@ ENGINEERED_FEATURES = [
     "is_off_hours",
 ]
 
+CATEGORICAL_FEATURES = [
+    "Payment_type",
+    "Payment_currency",
+    "Received_currency",
+    "Sender_bank_location",
+    "Receiver_bank_location",
+]
+
 
 def validate_schema(df: pd.DataFrame) -> tuple[bool, list[str]]:
     missing = [c for c in SAML_REQUIRED_COLUMNS if c not in df.columns]
@@ -69,15 +77,11 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
 
 def build_model_matrix(df_feat: pd.DataFrame, feature_columns: list[str]) -> pd.DataFrame:
     x = df_feat[feature_columns].copy()
-    x = pd.get_dummies(
-        x,
-        columns=[
-            "Payment_type",
-            "Payment_currency",
-            "Received_currency",
-            "Sender_bank_location",
-            "Receiver_bank_location",
-        ],
-        drop_first=False,
-    )
+    x = pd.get_dummies(x, columns=CATEGORICAL_FEATURES, drop_first=False)
     return x
+
+
+def prepare_model_matrix(df_feat: pd.DataFrame, rf_feature_names) -> pd.DataFrame:
+    """One-hot encode categoricals and reindex to RF feature columns in one step."""
+    x = pd.get_dummies(df_feat.copy(), columns=CATEGORICAL_FEATURES, drop_first=False)
+    return x.reindex(columns=list(rf_feature_names), fill_value=0)

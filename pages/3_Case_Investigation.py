@@ -15,17 +15,17 @@ from utils.aml_services import (
     update_case_record,
 )
 from utils.audit_logger import log_action
+from utils.constants import RISK_TIER_COLORS
 from utils.data_store import get_customers, upsert_customers
+from utils.feature_engineering import CATEGORICAL_FEATURES, ENGINEERED_FEATURES, prepare_model_matrix
 from utils.model_loader import load_models
+from utils.session_utils import get_current_analyst, require_scored_df
 from utils.shap_explainer import get_model_xai_explanation
 
 st.title("3. Case Investigation")
 
-scored_df = st.session_state.get("scored_df")
-if scored_df is None:
-    st.error("No scored dataset available. Please upload and score data first.")
-    st.stop()
-
+require_scored_df()
+scored_df = st.session_state["scored_df"]
 scored_df = ensure_scored_defaults(scored_df)
 st.session_state["scored_df"] = scored_df
 
@@ -45,15 +45,12 @@ if rows.empty:
     st.stop()
 
 selected_txn = rows.iloc[0]
-analyst_id = st.session_state.get("current_actor_id", "Analyst")
-actor_role = st.session_state.get("current_actor_role", "Admin")
+analyst_id, actor_role = get_current_analyst()
 case_record = ensure_case_for_transaction(selected_txn, analyst_id)
 existing_case = get_case_by_transaction(str(selected_txn["transaction_id"])) or case_record
 st.session_state["selected_case_id"] = existing_case["case_id"]
 
-tier_color = {"Critical": "#f44336", "High": "#fb8c00", "Medium": "#fdd835", "Low": "#cfd8dc"}.get(
-    selected_txn["risk_tier"], "#cfd8dc"
-)
+tier_color = RISK_TIER_COLORS.get(selected_txn["risk_tier"], "#cfd8dc")
 
 st.subheader("Case Workspace")
 c1, c2, c3, c4 = st.columns(4)
@@ -84,44 +81,16 @@ with d2:
 
 st.subheader("Model Explainability (CART + Logistic)")
 rf_model, cart_model, logit_model = load_models()
-base_features = [
-    "amount_log",
-    "cross_border",
-    "cross_currency",
-    "sender_txn_count",
-    "receiver_txn_count",
-    "sender_unique_receivers",
-    "receiver_unique_senders",
-    "hour",
-    "day_of_week",
-    "is_off_hours",
-    "Payment_type",
-    "Payment_currency",
-    "Received_currency",
-    "Sender_bank_location",
-    "Receiver_bank_location",
-]
-
-x = scored_df[base_features].copy()
-x = pd.get_dummies(
-    x,
-    columns=[
-        "Payment_type",
-        "Payment_currency",
-        "Received_currency",
-        "Sender_bank_location",
-        "Receiver_bank_location",
-    ],
-    drop_first=False,
-)
-x = x.reindex(columns=list(rf_model.feature_names_in_), fill_value=0)
+x = prepare_model_matrix(scored_df[ENGINEERED_FEATURES + CATEGORICAL_FEATURES], rf_model.feature_names_in_)
 
 idx = rows.index[0]
 row_for_shap = x.loc[[idx]].copy()
 
 try:
     top_features, plain_text, bullets = get_model_xai_explanation(cart_model, logit_model, row_for_shap, list(x.columns))
-except Exception:
+except Exception as e:
+    import sys
+    print(f"WARNING: XAI explanation failed: {e}", file=sys.stderr)
     top_features = [("amount_log", 0.0), ("cross_border", 0.0), ("cross_currency", 0.0)]
     plain_text = "This transaction was flagged primarily due to a combination of network and transaction risk indicators."
     bullets = [

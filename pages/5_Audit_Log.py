@@ -4,10 +4,11 @@ import pandas as pd
 import streamlit as st
 
 from utils.audit_logger import read_audit_events, read_audit_log
+from utils.session_utils import get_current_analyst
 
 st.title("5. Audit Log")
 
-actor_role = st.session_state.get("current_actor_role", "Admin")
+current_actor, actor_role = get_current_analyst()
 events = pd.DataFrame(read_audit_events())
 legacy_rows = pd.DataFrame(read_audit_log())
 
@@ -34,7 +35,6 @@ with tab1:
 
         view = events.copy()
         if actor_role != "Admin":
-            current_actor = st.session_state.get("current_actor_id", "Analyst")
             view = view[view["actor_id"].astype(str) == current_actor]
             st.caption("Non-admin roles only see their own audit events.")
 

@@ -8,7 +8,8 @@ import streamlit as st
 from utils.audit_logger import log_action
 from utils.aml_services import ensure_scored_defaults, sync_customer_profiles
 from utils.data_store import get_model_registry
-from utils.feature_engineering import ENGINEERED_FEATURES, SAML_REQUIRED_COLUMNS, engineer_features, validate_schema
+from utils.feature_engineering import CATEGORICAL_FEATURES, ENGINEERED_FEATURES, SAML_REQUIRED_COLUMNS, engineer_features, prepare_model_matrix, validate_schema
+from utils.session_utils import get_current_analyst
 from utils.model_loader import load_models
 
 st.title("1. Data Upload")
@@ -35,28 +36,7 @@ if uploaded is not None:
     feat = engineer_features(raw)
     rf_model, _, _ = load_models()
 
-    base_features = ENGINEERED_FEATURES + [
-        "Payment_type",
-        "Payment_currency",
-        "Received_currency",
-        "Sender_bank_location",
-        "Receiver_bank_location",
-    ]
-
-    x = pd.get_dummies(
-        feat[base_features].copy(),
-        columns=[
-            "Payment_type",
-            "Payment_currency",
-            "Received_currency",
-            "Sender_bank_location",
-            "Receiver_bank_location",
-        ],
-        drop_first=False,
-    )
-
-    rf_cols = list(rf_model.feature_names_in_)
-    x_rf = x.reindex(columns=rf_cols, fill_value=0)
+    x_rf = prepare_model_matrix(feat[ENGINEERED_FEATURES + CATEGORICAL_FEATURES], rf_model.feature_names_in_)
     if hasattr(rf_model, "predict_proba"):
         risk_probability = rf_model.predict_proba(x_rf)[:, 1]
     else:
@@ -69,6 +49,7 @@ if uploaded is not None:
     feat["prediction_wrong"] = ""
     feat["prediction_feedback_reason"] = ""
     feat = ensure_scored_defaults(feat)
+    analyst_id, actor_role = get_current_analyst()
 
     # initialize alert status for this dataset
     statuses = {}
@@ -103,12 +84,12 @@ if uploaded is not None:
     log_action(
         action="dataset_uploaded",
         details=f"filename={uploaded.name}; row_count={len(feat)}; flagged_count={flagged_count}",
-        analyst_id=st.session_state.get("current_actor_id", "Analyst"),
+        analyst_id=analyst_id,
         module="data_upload",
         event_type="dataset_uploaded",
         entity_type="dataset",
         entity_id=uploaded.name,
-        actor_role=st.session_state.get("current_actor_role", "Admin"),
+        actor_role=actor_role,
         payload={
             "filename": uploaded.name,
             "row_count": len(feat),
@@ -123,12 +104,12 @@ if uploaded is not None:
             action="prediction_generated",
             transaction_id=str(row["transaction_id"]),
             details=f"risk_score={float(row['risk_score']):.4f}; risk_tier={row['risk_tier']}",
-            analyst_id=st.session_state.get("current_actor_id", "Analyst"),
+            analyst_id=analyst_id,
             module="risk_scoring",
             event_type="prediction_generated",
             entity_type="transaction",
             entity_id=str(row["transaction_id"]),
-            actor_role=st.session_state.get("current_actor_role", "Admin"),
+            actor_role=actor_role,
             payload={
                 "risk_score": round(float(row["risk_score"]), 4),
                 "risk_tier": row["risk_tier"],

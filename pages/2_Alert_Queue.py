@@ -3,15 +3,16 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from utils.audit_logger import log_action
+from utils.audit_helpers import log_alert_dismissed, log_alert_escalated, log_prediction_feedback
 from utils.aml_services import ensure_case_for_transaction, ensure_scored_defaults, record_hitl_feedback
+from utils.constants import ALERT_QUEUE_DISPLAY_LIMIT, RISK_TIER_COLORS
+from utils.session_utils import get_current_analyst, require_scored_df
 
 st.title("2. Alert Queue")
 
-scored_df = st.session_state.get("scored_df")
-if scored_df is None:
-    st.error("No scored dataset found. Please upload data in Page 1 first.")
-    st.stop()
+require_scored_df()
+scored_df = st.session_state["scored_df"]
+_, actor_role = get_current_analyst()
 
 scored_df = ensure_scored_defaults(scored_df)
 st.session_state["scored_df"] = scored_df
@@ -66,9 +67,9 @@ reasons = [
 
 feedback_options = ["False Positive", "False Negative", "Needs retraining", "Other"]
 
-for _, row in view.head(200).iterrows():
+for _, row in view.head(ALERT_QUEUE_DISPLAY_LIMIT).iterrows():
     txid = str(row["transaction_id"])
-    color = {"Critical": "#f44336", "High": "#fb8c00", "Medium": "#fdd835", "Low": "#cfd8dc"}.get(row["risk_tier"], "#e0e0e0")
+    color = RISK_TIER_COLORS.get(row["risk_tier"], "#e0e0e0")
     status = status_map.get(txid, {}).get("status", "New")
 
     with st.container(border=True):
@@ -104,43 +105,14 @@ for _, row in view.head(200).iterrows():
             st.session_state["selected_txn_id"] = txid
             case = ensure_case_for_transaction(row, analyst_id)
             st.session_state["selected_case_id"] = case["case_id"]
-            log_action(
-                action="alert_escalated",
-                transaction_id=txid,
-                details=f"case_id={case['case_id']}; risk_tier={row['risk_tier']}",
-                analyst_id=analyst_id,
-                module="alert_queue",
-                event_type="alert_escalated",
-                entity_type="case",
-                entity_id=case["case_id"],
-                actor_role=st.session_state.get("current_actor_role", "Admin"),
-                payload={
-                    "case_id": case["case_id"],
-                    "risk_score": round(float(row["risk_score"]), 4),
-                    "risk_tier": row["risk_tier"],
-                },
-            )
+            log_alert_escalated(txid, case["case_id"], analyst_id, actor_role, row["risk_tier"], float(row["risk_score"]))
             st.switch_page("pages/3_Case_Investigation.py")
 
         dismiss_reason = a3.selectbox("Dismiss reason", reasons, key=f"reason_{txid}")
         if a2.button("Dismiss", key=f"dis_{txid}"):
             status_map[txid] = {"status": "Dismissed", "reason": dismiss_reason}
             st.session_state["alert_status"] = status_map
-            log_action(
-                action="alert_dismissed",
-                transaction_id=txid,
-                details=f"rf_prediction={int(row['risk_score'])}; reason={dismiss_reason}",
-                analyst_id=analyst_id,
-                module="alert_queue",
-                event_type="alert_dismissed",
-                entity_type="transaction",
-                entity_id=txid,
-                actor_role=st.session_state.get("current_actor_role", "Admin"),
-                payload={
-                    "dismiss_reason": dismiss_reason,
-                    "risk_score": round(float(row["risk_score"]), 4),
-                },
-            )
+            log_alert_dismissed(txid, analyst_id, actor_role, dismiss_reason, float(row["risk_score"]))
             st.rerun()
 
         feedback_label = st.selectbox("Prediction correction", feedback_options, key=f"feedback_{txid}")
@@ -154,20 +126,5 @@ for _, row in view.head(200).iterrows():
                 reason=feedback_reason or "No reason provided",
                 actor_id=analyst_id,
             )
-            log_action(
-                action="prediction_feedback_logged",
-                transaction_id=txid,
-                details=f"corrected_label={feedback_label}; reason={feedback_reason}",
-                analyst_id=analyst_id,
-                module="alert_queue",
-                event_type="prediction_feedback_logged",
-                entity_type="feedback",
-                entity_id=txid,
-                actor_role=st.session_state.get("current_actor_role", "Admin"),
-                payload={
-                    "corrected_label": feedback_label,
-                    "reason": feedback_reason,
-                    "original_prediction": int(row["rf_prediction"]),
-                },
-            )
+            log_prediction_feedback(txid, analyst_id, actor_role, feedback_label, feedback_reason, int(row["rf_prediction"]))
             st.success("HITL feedback captured.")
