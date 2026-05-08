@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from utils.audit_logger import log_action
+from utils.aml_services import ensure_case_for_transaction, ensure_scored_defaults, record_hitl_feedback
 
 st.title("2. Alert Queue")
 
@@ -12,6 +13,8 @@ if scored_df is None:
     st.error("No scored dataset found. Please upload data in Page 1 first.")
     st.stop()
 
+scored_df = ensure_scored_defaults(scored_df)
+st.session_state["scored_df"] = scored_df
 status_map = st.session_state.get("alert_status", {})
 
 # Apply status from session state to dataframe view
@@ -23,7 +26,7 @@ view["Dismiss_Reason"] = view["transaction_id"].map(lambda x: status_map.get(x, 
 st.subheader("Filters")
 colf1, colf2, colf3, colf4 = st.columns(4)
 with colf1:
-    tiers = st.multiselect("Risk Tier", ["Critical", "Low"], default=["Critical"])
+    tiers = st.multiselect("Risk Tier", ["Critical", "High", "Medium", "Low"], default=["Critical", "High", "Medium"])
 with colf2:
     payment_types = sorted(view["Payment_type"].astype(str).unique().tolist())
     selected_pt = st.multiselect("Payment Type", payment_types, default=payment_types)
@@ -56,11 +59,12 @@ if view.empty:
     st.stop()
 
 reasons = [
-    "Rule-based false positive",
-    "Known legitimate counterparty",
-    "Amount within normal range",
-    "Other",
+    "False positive",
+    "Investigated no concern",
+    "Duplicate",
 ]
+
+feedback_options = ["False Positive", "False Negative", "Needs retraining", "Other"]
 
 for _, row in view.head(200).iterrows():
     txid = str(row["transaction_id"])
@@ -73,8 +77,22 @@ for _, row in view.head(200).iterrows():
         c1.write(f"Sender: `{row['Sender_account']}`")
         c2.write(f"Receiver: `{row['Receiver_account']}`")
         c3.write(f"Amount: `{row['Amount']:,.2f}`")
-        c4.write(f"Type: `{row['Payment_type']}`")
-        c5.write(f"RF Decision: `{'Flagged' if int(row['risk_score']) == 1 else 'Not flagged'}`")
+        c4.write(f"Timestamp: `{row['Date']} {row['Time']}`")
+        c5.write(f"Risk Score: `{float(row['risk_score']):.3f}`")
+
+        with st.expander("Explainability Snapshot"):
+            st.write(
+                f"Plain-English drivers: counterparty fan-out/fan-in, cross-border/currency behavior, and amount profile for alert `{txid}`."
+            )
+            st.write(
+                {
+                    "risk_score": round(float(row["risk_score"]), 4),
+                    "tier": row["risk_tier"],
+                    "cross_border": int(row["cross_border"]),
+                    "cross_currency": int(row["cross_currency"]),
+                    "high_value": bool(row["is_high_value"]),
+                }
+            )
 
         if status == "Dismissed":
             st.caption(f"Dismiss reason: {status_map.get(txid, {}).get('reason', '')}")
@@ -84,6 +102,24 @@ for _, row in view.head(200).iterrows():
             status_map[txid] = {"status": "Escalated", "reason": status_map.get(txid, {}).get("reason", "")}
             st.session_state["alert_status"] = status_map
             st.session_state["selected_txn_id"] = txid
+            case = ensure_case_for_transaction(row, analyst_id)
+            st.session_state["selected_case_id"] = case["case_id"]
+            log_action(
+                action="alert_escalated",
+                transaction_id=txid,
+                details=f"case_id={case['case_id']}; risk_tier={row['risk_tier']}",
+                analyst_id=analyst_id,
+                module="alert_queue",
+                event_type="alert_escalated",
+                entity_type="case",
+                entity_id=case["case_id"],
+                actor_role=st.session_state.get("current_actor_role", "Admin"),
+                payload={
+                    "case_id": case["case_id"],
+                    "risk_score": round(float(row["risk_score"]), 4),
+                    "risk_tier": row["risk_tier"],
+                },
+            )
             st.switch_page("pages/3_Case_Investigation.py")
 
         dismiss_reason = a3.selectbox("Dismiss reason", reasons, key=f"reason_{txid}")
@@ -95,5 +131,43 @@ for _, row in view.head(200).iterrows():
                 transaction_id=txid,
                 details=f"rf_prediction={int(row['risk_score'])}; reason={dismiss_reason}",
                 analyst_id=analyst_id,
+                module="alert_queue",
+                event_type="alert_dismissed",
+                entity_type="transaction",
+                entity_id=txid,
+                actor_role=st.session_state.get("current_actor_role", "Admin"),
+                payload={
+                    "dismiss_reason": dismiss_reason,
+                    "risk_score": round(float(row["risk_score"]), 4),
+                },
             )
             st.rerun()
+
+        feedback_label = st.selectbox("Prediction correction", feedback_options, key=f"feedback_{txid}")
+        feedback_reason = st.text_input("Correction reason", key=f"feedback_reason_{txid}")
+        if st.button("Log HITL Feedback", key=f"feedback_btn_{txid}"):
+            record_hitl_feedback(
+                transaction_id=txid,
+                customer_id=str(row["customer_id"]),
+                original_prediction="Flagged" if int(row["rf_prediction"]) == 1 else "Not flagged",
+                corrected_label=feedback_label,
+                reason=feedback_reason or "No reason provided",
+                actor_id=analyst_id,
+            )
+            log_action(
+                action="prediction_feedback_logged",
+                transaction_id=txid,
+                details=f"corrected_label={feedback_label}; reason={feedback_reason}",
+                analyst_id=analyst_id,
+                module="alert_queue",
+                event_type="prediction_feedback_logged",
+                entity_type="feedback",
+                entity_id=txid,
+                actor_role=st.session_state.get("current_actor_role", "Admin"),
+                payload={
+                    "corrected_label": feedback_label,
+                    "reason": feedback_reason,
+                    "original_prediction": int(row["rf_prediction"]),
+                },
+            )
+            st.success("HITL feedback captured.")

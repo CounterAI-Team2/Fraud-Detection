@@ -2,11 +2,20 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
-import matplotlib.pyplot as plt
 
+from utils.aml_services import (
+    attach_case_files,
+    ensure_case_for_transaction,
+    ensure_scored_defaults,
+    get_case_by_transaction,
+    get_related_transactions,
+    update_case_record,
+)
 from utils.audit_logger import log_action
+from utils.data_store import get_customers, upsert_customers
 from utils.model_loader import load_models
 from utils.shap_explainer import get_model_xai_explanation
 
@@ -17,12 +26,15 @@ if scored_df is None:
     st.error("No scored dataset available. Please upload and score data first.")
     st.stop()
 
+scored_df = ensure_scored_defaults(scored_df)
+st.session_state["scored_df"] = scored_df
+
 selected_txn_id = st.session_state.get("selected_txn_id")
 if selected_txn_id is None:
     st.warning("No transaction selected from Alert Queue.")
-    flagged_options = scored_df[scored_df["risk_score"].astype(int) == 1]
+    flagged_options = scored_df[scored_df["rf_prediction"].astype(int) == 1]
     if flagged_options.empty:
-        st.info("No RF-flagged transactions are available for investigation.")
+        st.info("No flagged transactions are available for investigation.")
         st.stop()
     tx_options = flagged_options["transaction_id"].astype(str).tolist()
     selected_txn_id = st.selectbox("Select transaction", tx_options)
@@ -33,16 +45,22 @@ if rows.empty:
     st.stop()
 
 selected_txn = rows.iloc[0]
+analyst_id = st.session_state.get("current_actor_id", "Analyst")
+actor_role = st.session_state.get("current_actor_role", "Admin")
+case_record = ensure_case_for_transaction(selected_txn, analyst_id)
+existing_case = get_case_by_transaction(str(selected_txn["transaction_id"])) or case_record
+st.session_state["selected_case_id"] = existing_case["case_id"]
 
-score = int(selected_txn["risk_score"])
-if score != 1:
-    st.warning("Explainable AI is only generated for RF-flagged transactions.")
-    st.stop()
+tier_color = {"Critical": "#f44336", "High": "#fb8c00", "Medium": "#fdd835", "Low": "#cfd8dc"}.get(
+    selected_txn["risk_tier"], "#cfd8dc"
+)
 
-if score == 1:
-    tier_color = "#f44336"
-else:
-    tier_color = "#cfd8dc"
+st.subheader("Case Workspace")
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Case ID", existing_case["case_id"])
+c2.metric("Status", existing_case.get("status", "Open"))
+c3.metric("Risk Tier", selected_txn["risk_tier"])
+c4.metric("Risk Score", f"{float(selected_txn['risk_score']):.3f}")
 
 st.subheader("Transaction Details")
 d1, d2 = st.columns([2, 1])
@@ -59,14 +77,13 @@ with d1:
     st.write(f"Received Currency: `{selected_txn['Received_currency']}`")
 with d2:
     st.markdown(
-        f"<div style='font-size:28px;font-weight:700;color:{tier_color}'>{'Flagged' if score == 1 else 'Not flagged'}</div>"
+        f"<div style='font-size:28px;font-weight:700;color:{tier_color}'>{'Flagged' if int(selected_txn['rf_prediction']) == 1 else 'Not flagged'}</div>"
         f"<div style='padding:6px;border-radius:8px;background:{tier_color};color:black;font-weight:700'>{selected_txn['risk_tier']}</div>",
         unsafe_allow_html=True,
     )
 
 st.subheader("Model Explainability (CART + Logistic)")
 rf_model, cart_model, logit_model = load_models()
-
 base_features = [
     "amount_log",
     "cross_border",
@@ -107,62 +124,132 @@ try:
 except Exception:
     top_features = [("amount_log", 0.0), ("cross_border", 0.0), ("cross_currency", 0.0)]
     plain_text = "This transaction was flagged primarily due to a combination of network and transaction risk indicators."
-    bullets = ["- sender transacts with unusually many unique receivers (fan-out)", "- transaction amount is significantly above typical", "- transaction crosses international borders"]
+    bullets = [
+        "- sender transacts with unusually many unique receivers (fan-out)",
+        "- transaction amount is significantly above typical",
+        "- transaction crosses international borders",
+    ]
 
 st.session_state["shap_top3_text"] = "; ".join([f for f, _ in top_features[:3]])
-
-plot_df = pd.DataFrame(top_features, columns=["feature", "shap_value"])
-plot_df = plot_df.sort_values("shap_value", key=lambda s: s.abs(), ascending=True)
+plot_df = pd.DataFrame(top_features, columns=["feature", "shap_value"]).sort_values(
+    "shap_value", key=lambda s: s.abs(), ascending=True
+)
 
 fig, ax = plt.subplots(figsize=(8, 3.5))
 ax.barh(plot_df["feature"], plot_df["shap_value"], color="#42a5f5")
 ax.set_xlabel("Combined contribution (CART importance + Logistic local effect)")
 ax.set_ylabel("Feature")
 st.pyplot(fig)
-
 st.write(plain_text)
-for b in bullets:
-    st.markdown(b)
+for feature_name, feature_value in top_features[:5]:
+    arrow = "up" if feature_value >= 0 else "down"
+    st.write(f"- {feature_name}: risk {arrow} ({feature_value:.4f})")
+for bullet in bullets:
+    st.markdown(bullet)
 
-st.subheader("Related Transactions")
-sender_acc = selected_txn["Sender_account"]
-receiver_acc = selected_txn["Receiver_account"]
+st.subheader("Related Transactions (+/-30 days)")
+related = get_related_transactions(scored_df, selected_txn, window_days=30)
+if related.empty:
+    st.info("No related transactions found in the review window.")
+else:
+    st.dataframe(
+        related[
+            [
+                "transaction_id",
+                "Date",
+                "Time",
+                "Receiver_account",
+                "Amount",
+                "risk_score",
+                "risk_tier",
+                "highlight_reason",
+            ]
+        ],
+        use_container_width=True,
+    )
 
-scored_df = scored_df.copy()
-scored_df["_dt"] = pd.to_datetime(scored_df["Date"].astype(str) + " " + scored_df["Time"].astype(str), errors="coerce")
+st.subheader("CDD Decisioning")
+customers = get_customers()
+customer_mask = customers["customer_id"].astype(str) == str(selected_txn["customer_id"])
+customer_row = customers[customer_mask].iloc[0] if not customers.empty and customer_mask.any() else None
 
-sender_last = scored_df[scored_df["Sender_account"] == sender_acc].sort_values("_dt", ascending=False).head(10)
-receiver_last = scored_df[scored_df["Receiver_account"] == receiver_acc].sort_values("_dt", ascending=False).head(10)
-
-st.write("Last 10 from same Sender")
-st.dataframe(
-    sender_last[["transaction_id", "Date", "Time", "Receiver_account", "Amount", "risk_tier"]],
-    use_container_width=True,
+default_cdd = existing_case.get("cdd_level", "Standard")
+default_idx = ["Simplified", "Standard", "Enhanced"].index(default_cdd) if default_cdd in ["Simplified", "Standard", "Enhanced"] else 1
+cdd_level = st.radio("CDD Level", ["Simplified", "Standard", "Enhanced"], index=default_idx, horizontal=True)
+status = st.selectbox("Case Status", ["Open", "In Review", "Escalated", "Resolved", "Archived"], index=1 if existing_case.get("status") == "In Review" else 0)
+notes = st.text_area("Investigation notes", value=existing_case.get("notes", ""), height=140)
+outcome_reason = st.text_input("Resolution reason (required if resolving without STR)", value=existing_case.get("resolution", ""))
+attachment_names = st.text_input(
+    "Attachment names (comma separated metadata only)",
+    value=existing_case.get("attachment_names", ""),
+    help="MVP stores attachment metadata only.",
 )
-st.write("Last 10 to same Receiver")
-st.dataframe(
-    receiver_last[["transaction_id", "Date", "Time", "Sender_account", "Amount", "risk_tier"]],
-    use_container_width=True,
-)
 
-st.subheader("CDD Level Selector")
-cdd_level = st.radio("CDD Level", ["Simplified CDD", "Standard CDD", "Enhanced CDD"], horizontal=True)
-notes = st.text_area("Investigation notes", key="investigation_notes", height=120)
-outcome_reason = st.text_input("Resolution reason (required if resolving without STR)", value="")
-analyst_id = st.text_input("Analyst ID", value="Analyst")
+save_col, escalate_col, resolve_col = st.columns(3)
+if save_col.button("Save Case Workspace"):
+    updated_case = update_case_record(
+        existing_case["case_id"],
+        {
+            "status": status,
+            "cdd_level": cdd_level,
+            "notes": notes,
+            "resolution": outcome_reason,
+            "str_required": cdd_level == "Enhanced",
+            "kyc_risk_tier": "High" if cdd_level == "Enhanced" else ("Medium" if cdd_level == "Standard" else "Low"),
+        },
+    )
+    attachment_list = [item.strip() for item in attachment_names.split(",") if item.strip()]
+    updated_case = attach_case_files(updated_case["case_id"], attachment_list)
 
-c1, c2 = st.columns(2)
+    if customer_row is not None:
+        customers.loc[customer_mask, "cdd_level"] = cdd_level
+        customers.loc[customer_mask, "kyc_risk_tier"] = updated_case["kyc_risk_tier"]
+        customers.loc[customer_mask, "last_review_date"] = str(pd.Timestamp.utcnow().date())
+        customers.loc[customer_mask, "updated_at"] = datetime.now().isoformat()
+        upsert_customers(customers)
 
-escalate_enabled = bool(cdd_level and notes.strip())
-if c1.button("Escalate to STR", disabled=not escalate_enabled):
+    log_action(
+        action="cdd_case_updated",
+        transaction_id=str(selected_txn["transaction_id"]),
+        details=f"case_id={updated_case['case_id']}; cdd_level={cdd_level}; status={status}",
+        analyst_id=analyst_id,
+        module="cdd_module",
+        event_type="cdd_case_updated",
+        entity_type="case",
+        entity_id=updated_case["case_id"],
+        actor_role=actor_role,
+        payload={
+            "cdd_level": cdd_level,
+            "status": status,
+            "notes_length": len(notes),
+            "attachment_count": len(attachment_list),
+        },
+    )
+    st.success("Case workspace saved.")
+
+escalate_enabled = bool(notes.strip())
+if escalate_col.button("Escalate to STR", disabled=not escalate_enabled):
+    updated_case = update_case_record(
+        existing_case["case_id"],
+        {
+            "status": "Escalated",
+            "cdd_level": cdd_level,
+            "notes": notes,
+            "str_required": True,
+            "kyc_risk_tier": "High" if cdd_level == "Enhanced" else existing_case.get("kyc_risk_tier", "Medium"),
+        },
+    )
     st.session_state["str_case"] = {
+        "case_id": updated_case["case_id"],
+        "customer_id": str(selected_txn["customer_id"]),
+        "customer_name": customer_row["customer_name"] if customer_row is not None else "",
         "transaction_id": str(selected_txn["transaction_id"]),
         "date": str(selected_txn["Date"]),
         "sender_account": str(selected_txn["Sender_account"]),
         "receiver_account": str(selected_txn["Receiver_account"]),
         "amount": float(selected_txn["Amount"]),
         "payment_type": str(selected_txn["Payment_type"]),
-        "risk_score": int(selected_txn["risk_score"]),
+        "risk_score": float(selected_txn["risk_score"]),
         "risk_tier": str(selected_txn["risk_tier"]),
         "cdd_level": cdd_level,
         "investigation_notes": notes,
@@ -171,24 +258,53 @@ if c1.button("Escalate to STR", disabled=not escalate_enabled):
         "escalated_by": analyst_id,
     }
     log_action(
-        action="case_investigated",
+        action="case_escalated_to_str",
         transaction_id=str(selected_txn["transaction_id"]),
-        details=f"cdd_level={cdd_level}; notes_length={len(notes)}; outcome=escalated_to_str",
+        details=f"case_id={updated_case['case_id']}; cdd_level={cdd_level}",
         analyst_id=analyst_id,
+        module="cdd_module",
+        event_type="case_escalated_to_str",
+        entity_type="case",
+        entity_id=updated_case["case_id"],
+        actor_role=actor_role,
+        payload={
+            "cdd_level": cdd_level,
+            "notes_length": len(notes),
+            "str_required": True,
+        },
     )
     st.switch_page("pages/4_STR_Generation.py")
 
-if c2.button("Resolve - No STR Required"):
+if resolve_col.button("Resolve - No STR Required"):
     if not outcome_reason.strip():
         st.error("Please provide a resolution reason.")
     else:
+        updated_case = update_case_record(
+            existing_case["case_id"],
+            {
+                "status": "Resolved",
+                "cdd_level": cdd_level,
+                "notes": notes,
+                "resolution": outcome_reason,
+                "str_required": False,
+            },
+        )
         status_map = st.session_state.get("alert_status", {})
         status_map[str(selected_txn["transaction_id"])] = {"status": "Dismissed", "reason": outcome_reason}
         st.session_state["alert_status"] = status_map
         log_action(
-            action="case_investigated",
+            action="case_resolved_no_str",
             transaction_id=str(selected_txn["transaction_id"]),
-            details=f"cdd_level={cdd_level}; notes_length={len(notes)}; outcome=resolved_no_str; reason={outcome_reason}",
+            details=f"case_id={updated_case['case_id']}; cdd_level={cdd_level}; reason={outcome_reason}",
             analyst_id=analyst_id,
+            module="cdd_module",
+            event_type="case_resolved_no_str",
+            entity_type="case",
+            entity_id=updated_case["case_id"],
+            actor_role=actor_role,
+            payload={
+                "cdd_level": cdd_level,
+                "reason": outcome_reason,
+            },
         )
         st.success("Case resolved without STR.")

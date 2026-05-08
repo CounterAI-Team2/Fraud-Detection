@@ -1,0 +1,4 @@
+watchlist_id,name,account_id,country,reason
+WL-001,Global Risk Trading LLC,1631823864,UK,Synthetic sanctioned counterparty for demo flows
+WL-002,Zeta Holdings,6125211006,Nigeria,Synthetic politically exposed counterparty for demo flows
+WL-003,Nova Imports,2774166966,Germany,Synthetic restricted remitter for demo flows

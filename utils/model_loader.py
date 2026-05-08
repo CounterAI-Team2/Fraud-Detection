@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+
 import joblib
+
+from utils.data_store import get_model_registry, upsert_model_registry_entry, utc_now_iso
 
 MODELS_DIR = Path("models")
 RF_PATH = MODELS_DIR / "rf_model.pkl"
@@ -40,3 +43,23 @@ def load_models():
     cart_model = joblib.load(CART_PATH)
     logit_model = joblib.load(LOGIT_PATH)
     return rf_model, cart_model, logit_model
+
+
+def ensure_model_registry_entry() -> None:
+    registry = get_model_registry()
+    models = registry.get("models", [])
+    if models:
+        return
+
+    upsert_model_registry_entry(
+        {
+            "model_id": "counterai-rf-cart-logit",
+            "version": "v0.1",
+            "trained_on": utc_now_iso(),
+            "precision": "",
+            "recall": "",
+            "f1": "",
+            "error_rate": "",
+            "notes": "Backfilled placeholder entry for pretrained MVP bundle.",
+        }
+    )

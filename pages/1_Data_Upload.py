@@ -1,24 +1,22 @@
 from __future__ import annotations
 
 import time
+
 import pandas as pd
 import streamlit as st
 
 from utils.audit_logger import log_action
+from utils.aml_services import ensure_scored_defaults, sync_customer_profiles
+from utils.data_store import get_model_registry
 from utils.feature_engineering import ENGINEERED_FEATURES, SAML_REQUIRED_COLUMNS, engineer_features, validate_schema
 from utils.model_loader import load_models
 
 st.title("1. Data Upload")
-st.caption("Upload SAML-D schema CSV and flag transactions predicted as money laundering by the pretrained RF model.")
+st.caption("Upload a transaction CSV, validate schema, engineer AML features, score risk, and persist customer profiles for downstream review.")
 
 uploaded = st.file_uploader("Upload CSV", type=["csv"])
 cap_rows = st.number_input("Demo row cap (for speed)", min_value=1000, max_value=200000, value=50000, step=1000)
-
-
-def _tier(score: float) -> str:
-    if score >= 1.0:
-        return "Critical"
-    return "Low"
+threshold = st.slider("Risk threshold", min_value=0.05, max_value=0.95, value=0.50, step=0.05)
 
 
 if uploaded is not None:
@@ -59,11 +57,18 @@ if uploaded is not None:
 
     rf_cols = list(rf_model.feature_names_in_)
     x_rf = x.reindex(columns=rf_cols, fill_value=0)
-    pred = rf_model.predict(x_rf).astype(int)
+    if hasattr(rf_model, "predict_proba"):
+        risk_probability = rf_model.predict_proba(x_rf)[:, 1]
+    else:
+        risk_probability = rf_model.predict(x_rf).astype(float)
+    pred = (risk_probability >= threshold).astype(int)
 
     feat["rf_prediction"] = pred
-    feat["risk_score"] = pred  # compatibility field for downstream pages
-    feat["risk_tier"] = feat["risk_score"].apply(_tier)
+    feat["risk_score"] = risk_probability
+    feat["risk_threshold"] = threshold
+    feat["prediction_wrong"] = ""
+    feat["prediction_feedback_reason"] = ""
+    feat = ensure_scored_defaults(feat)
 
     # initialize alert status for this dataset
     statuses = {}
@@ -72,30 +77,83 @@ if uploaded is not None:
 
     st.session_state["scored_df"] = feat
     st.session_state["alert_status"] = statuses
+    customer_profiles = sync_customer_profiles(feat)
 
     elapsed = time.time() - t0
 
     tier_counts = feat["risk_tier"].value_counts().to_dict()
-    flagged_count = int((feat["risk_score"] == 1).sum())
+    flagged_count = int((feat["rf_prediction"] == 1).sum())
+    registry = get_model_registry().get("models", [])
+    current_model = registry[-1] if registry else {}
 
     st.success("Dataset processed successfully.")
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     c1.metric("Transactions Scored", f"{len(feat):,}")
-    c2.metric("Flagged by RF", f"{flagged_count:,}")
+    c2.metric("Flagged Above Threshold", f"{flagged_count:,}")
     c3.metric("Processing Time", f"{elapsed:.2f}s")
+    c4.metric("Customer Profiles Synced", f"{len(customer_profiles):,}")
 
     st.write("Tier Counts", tier_counts)
+    if current_model:
+        st.caption(
+            "Current model registry entry: "
+            f"{current_model.get('model_id', '')} / version {current_model.get('version', '')}"
+        )
 
     log_action(
         action="dataset_uploaded",
-        details=(
-            f"filename={uploaded.name}; row_count={len(feat)}; "
-            f"flagged_count={flagged_count}; tiers={tier_counts}"
-        ),
+        details=f"filename={uploaded.name}; row_count={len(feat)}; flagged_count={flagged_count}",
+        analyst_id=st.session_state.get("current_actor_id", "Analyst"),
+        module="data_upload",
+        event_type="dataset_uploaded",
+        entity_type="dataset",
+        entity_id=uploaded.name,
+        actor_role=st.session_state.get("current_actor_role", "Admin"),
+        payload={
+            "filename": uploaded.name,
+            "row_count": len(feat),
+            "flagged_count": flagged_count,
+            "tiers": tier_counts,
+            "threshold": threshold,
+        },
     )
 
+    for _, row in feat.iterrows():
+        log_action(
+            action="prediction_generated",
+            transaction_id=str(row["transaction_id"]),
+            details=f"risk_score={float(row['risk_score']):.4f}; risk_tier={row['risk_tier']}",
+            analyst_id=st.session_state.get("current_actor_id", "Analyst"),
+            module="risk_scoring",
+            event_type="prediction_generated",
+            entity_type="transaction",
+            entity_id=str(row["transaction_id"]),
+            actor_role=st.session_state.get("current_actor_role", "Admin"),
+            payload={
+                "risk_score": round(float(row["risk_score"]), 4),
+                "risk_tier": row["risk_tier"],
+                "threshold": threshold,
+                "prediction": int(row["rf_prediction"]),
+            },
+        )
+
     st.subheader("Preview")
-    st.dataframe(feat.head(30), use_container_width=True)
+    st.dataframe(
+        feat[
+            [
+                "transaction_id",
+                "Date",
+                "Time",
+                "Sender_account",
+                "Receiver_account",
+                "Amount",
+                "risk_score",
+                "risk_tier",
+                "rf_prediction",
+            ]
+        ].head(50),
+        use_container_width=True,
+    )
 
 else:
     st.info("Expected columns:\n" + ", ".join(SAML_REQUIRED_COLUMNS))

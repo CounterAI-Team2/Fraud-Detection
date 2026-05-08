@@ -14,3 +14,9 @@ __pycache__/
 *.pyc
 
 .venv/
+data/audit_log_v2.csv
+data/cases.csv
+data/customers.csv
+data/hitl_feedback.csv
+data/str_archive.csv
+data/str_cases.csv

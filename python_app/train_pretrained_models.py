@@ -7,6 +7,7 @@ import joblib
 import pandas as pd
 
 from aml_pipeline import train_models
+from utils.data_store import upsert_model_registry_entry
 
 
 def main() -> None:
@@ -47,6 +48,27 @@ def main() -> None:
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(models, out_path)
+
+    precision = metrics.get("rf_test_accuracy", "")
+    recall = metrics.get("rf_test_recall", "")
+    f1 = ""
+    if precision != "" and recall != "":
+        denom = precision + recall
+        if denom:
+            f1 = round((2 * precision * recall) / denom, 4)
+
+    upsert_model_registry_entry(
+        {
+            "model_id": "counterai-rf-cart-logit",
+            "version": "v0.1",
+            "trained_on": out_path.stat().st_mtime,
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+            "error_rate": round(1 - precision, 4) if precision != "" else "",
+            "notes": f"Saved model bundle to {out_path}",
+        }
+    )
 
     print(f"Saved pretrained model bundle to {out_path}")
     print("Validation metrics:", metrics)
