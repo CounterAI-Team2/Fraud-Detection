@@ -29,9 +29,80 @@ STATUS_BADGE: dict[str, str] = {
     STR_STATUS_ARCHIVED: "🟢 Archived",
 }
 
-tab1, tab2 = st.tabs(["Workflow", "All STRs"])
+tab1, tab2, tab3 = st.tabs(["STR Tracker", "New STR", "View STR"])
 
+# ── Tab 1: STR Tracker ────────────────────────────────────────────────────────
 with tab1:
+    st.subheader("STR Status Tracker")
+    all_strs = get_all_str_records()
+
+    if all_strs.empty:
+        st.info("No STRs have been created yet. Escalate a case from Case Investigation to begin.")
+    else:
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total STRs", len(all_strs))
+        m2.metric("In Progress", int(all_strs["status"].isin([STR_STATUS_DRAFT, STR_STATUS_L1, STR_STATUS_L2]).sum()))
+        m3.metric("Archived", int(all_strs["status"].eq(STR_STATUS_ARCHIVED).sum()))
+
+        filter_col1, filter_col2 = st.columns([2, 3])
+        with filter_col1:
+            status_filter = st.multiselect(
+                "Filter by status",
+                STR_STATUSES,
+                default=STR_STATUSES,
+                key="tracker_status_filter",
+            )
+        with filter_col2:
+            search_term = st.text_input(
+                "Search by STR ID / Case ID / Transaction ID",
+                value="",
+                key="tracker_search",
+            )
+
+        view = all_strs[all_strs["status"].isin(status_filter)].copy()
+        if search_term.strip():
+            needle = search_term.strip().lower()
+            view = view[
+                view["str_id"].astype(str).str.lower().str.contains(needle)
+                | view["case_id"].astype(str).str.lower().str.contains(needle)
+                | view["transaction_id"].astype(str).str.lower().str.contains(needle)
+            ]
+
+        if view.empty:
+            st.info("No STRs match the current filters.")
+        else:
+            view["Status"] = view["status"].map(STATUS_BADGE).fillna(view["status"])
+            st.dataframe(
+                view[[
+                    "Status", "str_id", "case_id", "transaction_id",
+                    "reference_number", "l1_reviewer", "l2_reviewer", "updated_at",
+                ]].rename(columns={
+                    "str_id":           "STR ID",
+                    "case_id":          "Case ID",
+                    "transaction_id":   "Txn ID",
+                    "reference_number": "Reference No.",
+                    "l1_reviewer":      "L1 Reviewer",
+                    "l2_reviewer":      "L2 Reviewer",
+                    "updated_at":       "Last Updated",
+                }).sort_values("Last Updated", ascending=False),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            st.divider()
+            select_col, btn_col = st.columns([4, 1])
+            with select_col:
+                str_id_options = view["str_id"].astype(str).tolist()
+                selected_str_id = st.selectbox("Select STR to view", str_id_options, key="tracker_select_str")
+            with btn_col:
+                st.write("")
+                if st.button("View →", key="tracker_view_btn"):
+                    record = all_strs[all_strs["str_id"].astype(str) == selected_str_id].iloc[0].to_dict()
+                    st.session_state["selected_str_record"] = record
+                    st.success(f"Loaded {selected_str_id} — switch to the View STR tab.")
+
+# ── Tab 2: New STR (workflow) ─────────────────────────────────────────────────
+with tab2:
     if "str_case" not in st.session_state or st.session_state["str_case"] is None:
         st.info("No case loaded. Escalate a case from Case Investigation to begin an STR workflow.")
     else:
@@ -247,59 +318,45 @@ with tab1:
                 use_container_width=True,
             )
 
-with tab2:
-    st.subheader("STR Status Tracker")
-    all_strs = get_all_str_records()
+# ── Tab 3: View STR ───────────────────────────────────────────────────────────
+with tab3:
+    record = st.session_state.get("selected_str_record")
 
-    if all_strs.empty:
-        st.info("No STRs have been created yet. Submit a case from Case Investigation to begin.")
+    if record is None:
+        st.info("No STR selected. Use the STR Tracker tab to select one.")
     else:
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Total STRs", len(all_strs))
-        m2.metric("In Progress", int(all_strs["status"].isin([STR_STATUS_DRAFT, STR_STATUS_L1, STR_STATUS_L2]).sum()))
-        m3.metric("Archived", int(all_strs["status"].eq(STR_STATUS_ARCHIVED).sum()))
+        status = record.get("status", "")
+        st.subheader(f"{record.get('str_id', '—')}  {STATUS_BADGE.get(status, status)}")
 
-        filter_col1, filter_col2 = st.columns([2, 3])
-        with filter_col1:
-            status_filter = st.multiselect(
-                "Filter by status",
-                STR_STATUSES,
-                default=STR_STATUSES,
-                key="tracker_status_filter",
-            )
-        with filter_col2:
-            search_term = st.text_input(
-                "Search by STR ID / Case ID / Transaction ID",
-                value="",
-                key="tracker_search",
-            )
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Case ID", record.get("case_id", "—") or "—")
+        c2.metric("Transaction ID", record.get("transaction_id", "—") or "—")
+        c3.metric("Reference No.", record.get("reference_number", "—") or "—")
 
-        view = all_strs[all_strs["status"].isin(status_filter)].copy()
-        if search_term.strip():
-            needle = search_term.strip().lower()
-            view = view[
-                view["str_id"].astype(str).str.lower().str.contains(needle)
-                | view["case_id"].astype(str).str.lower().str.contains(needle)
-                | view["transaction_id"].astype(str).str.lower().str.contains(needle)
-            ]
+        st.subheader("Grounds for Suspicion")
+        st.text_area(
+            label="grounds",
+            value=record.get("grounds", ""),
+            height=150,
+            disabled=True,
+            key="view_str_grounds",
+            label_visibility="collapsed",
+        )
 
-        if view.empty:
-            st.info("No STRs match the current filters.")
-        else:
-            view["Status"] = view["status"].map(STATUS_BADGE).fillna(view["status"])
-            st.dataframe(
-                view[[
-                    "Status", "str_id", "case_id", "transaction_id",
-                    "reference_number", "l1_reviewer", "l2_reviewer", "updated_at",
-                ]].rename(columns={
-                    "str_id":           "STR ID",
-                    "case_id":          "Case ID",
-                    "transaction_id":   "Txn ID",
-                    "reference_number": "Reference No.",
-                    "l1_reviewer":      "L1 Reviewer",
-                    "l2_reviewer":      "L2 Reviewer",
-                    "updated_at":       "Last Updated",
-                }).sort_values("Last Updated", ascending=False),
-                use_container_width=True,
-                hide_index=True,
-            )
+        st.subheader("Reviewer Chain")
+        r1, r2 = st.columns(2)
+        with r1:
+            st.markdown("**L1 Review**")
+            st.write(f"Reviewer: {record.get('l1_reviewer', '') or '—'}")
+            st.write(f"Date: {record.get('l1_reviewed_at', '') or '—'}")
+            st.write(f"Decision: {record.get('l1_reason', '') or '—'}")
+        with r2:
+            st.markdown("**L2 Review**")
+            st.write(f"Reviewer: {record.get('l2_reviewer', '') or '—'}")
+            st.write(f"Date: {record.get('l2_reviewed_at', '') or '—'}")
+            st.write(f"Decision: {record.get('l2_reason', '') or '—'}")
+
+        st.subheader("Timeline")
+        t1, t2 = st.columns(2)
+        t1.write(f"Created: {record.get('created_at', '—') or '—'}")
+        t2.write(f"Last Updated: {record.get('updated_at', '—') or '—'}")

@@ -15,7 +15,7 @@ _DEFAULTS = {
     "scored_df": None, "alert_status": {}, "selected_txn_id": None,
     "str_case": None,  "str_log": [],     "selected_case_id": None,
     "current_actor_id": "Analyst", "current_actor_role": "Admin",
-    "current_str_id": None,
+    "current_str_id": None, "selected_str_record": None,
 }
 for _k, _v in _DEFAULTS.items():
     if _k not in st.session_state:
