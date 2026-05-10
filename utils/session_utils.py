@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import streamlit as st
 
+from utils.constants import DEFAULT_ACTOR_ID, DEFAULT_ACTOR_ROLE
+
 
 def get_current_analyst() -> tuple[str, str]:
-    actor_id   = st.session_state.get("current_actor_id",   "Analyst")
-    actor_role = st.session_state.get("current_actor_role", "Admin")
+    actor_id   = st.session_state.get("current_actor_id",   DEFAULT_ACTOR_ID)
+    actor_role = st.session_state.get("current_actor_role", DEFAULT_ACTOR_ROLE)
     return actor_id, actor_role
 
 

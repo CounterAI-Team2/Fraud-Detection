@@ -7,10 +7,11 @@ import streamlit as st
 
 from utils.audit_logger import log_action
 from utils.aml_services import ensure_scored_defaults, sync_customer_profiles
+from utils.constants import ALERT_STATUS_NEW, DATA_PREVIEW_LIMIT
 from utils.data_store import get_model_registry
 from utils.feature_engineering import CATEGORICAL_FEATURES, ENGINEERED_FEATURES, SAML_REQUIRED_COLUMNS, engineer_features, prepare_model_matrix, validate_schema
-from utils.session_utils import get_current_analyst
 from utils.model_loader import load_models
+from utils.session_utils import get_current_analyst
 
 st.title("1. Data Upload")
 st.caption("Upload a transaction CSV, validate schema, engineer AML features, score risk, and persist customer profiles for downstream review.")
@@ -54,7 +55,7 @@ if uploaded is not None:
     # initialize alert status for this dataset
     statuses = {}
     for txid in feat["transaction_id"].astype(str).tolist():
-        statuses[txid] = {"status": "New", "reason": ""}
+        statuses[txid] = {"status": ALERT_STATUS_NEW, "reason": ""}
 
     st.session_state["scored_df"] = feat
     st.session_state["alert_status"] = statuses
@@ -132,7 +133,7 @@ if uploaded is not None:
                 "risk_tier",
                 "rf_prediction",
             ]
-        ].head(50),
+        ].head(DATA_PREVIEW_LIMIT),
         use_container_width=True,
     )
 

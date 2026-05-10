@@ -14,7 +14,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Train and persist CounterAI pretrained models.")
     parser.add_argument(
         "--train-data",
-        default="/Users/saikalepu/Documents/BCG/CCAs/CounterAI-Neumann/SAML-D.csv",
+        required=True,
         help="Path to training CSV with Is_laundering target.",
     )
     parser.add_argument(

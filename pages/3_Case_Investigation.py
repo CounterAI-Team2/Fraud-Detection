@@ -15,7 +15,18 @@ from utils.aml_services import (
     update_case_record,
 )
 from utils.audit_logger import log_action
-from utils.constants import RISK_TIER_COLORS
+from utils.constants import (
+    ALERT_STATUS_DISMISSED,
+    CASE_STATUSES,
+    CASE_STATUS_ESCALATED,
+    CASE_STATUS_IN_REVIEW,
+    CASE_STATUS_OPEN,
+    CASE_STATUS_RESOLVED,
+    CDD_LEVEL_ENHANCED,
+    CDD_LEVEL_STANDARD,
+    CDD_LEVELS,
+    RISK_TIER_COLORS,
+)
 from utils.data_store import get_customers, upsert_customers
 from utils.feature_engineering import CATEGORICAL_FEATURES, ENGINEERED_FEATURES, prepare_model_matrix
 from utils.model_loader import load_models
@@ -55,7 +66,7 @@ tier_color = RISK_TIER_COLORS.get(selected_txn["risk_tier"], "#cfd8dc")
 st.subheader("Case Workspace")
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Case ID", existing_case["case_id"])
-c2.metric("Status", existing_case.get("status", "Open"))
+c2.metric("Status", existing_case.get("status", CASE_STATUS_OPEN))
 c3.metric("Risk Tier", selected_txn["risk_tier"])
 c4.metric("Risk Score", f"{float(selected_txn['risk_score']):.3f}")
 
@@ -142,10 +153,10 @@ customers = get_customers()
 customer_mask = customers["customer_id"].astype(str) == str(selected_txn["customer_id"])
 customer_row = customers[customer_mask].iloc[0] if not customers.empty and customer_mask.any() else None
 
-default_cdd = existing_case.get("cdd_level", "Standard")
-default_idx = ["Simplified", "Standard", "Enhanced"].index(default_cdd) if default_cdd in ["Simplified", "Standard", "Enhanced"] else 1
-cdd_level = st.radio("CDD Level", ["Simplified", "Standard", "Enhanced"], index=default_idx, horizontal=True)
-status = st.selectbox("Case Status", ["Open", "In Review", "Escalated", "Resolved", "Archived"], index=1 if existing_case.get("status") == "In Review" else 0)
+default_cdd = existing_case.get("cdd_level", CDD_LEVEL_STANDARD)
+default_idx = CDD_LEVELS.index(default_cdd) if default_cdd in CDD_LEVELS else 1
+cdd_level = st.radio("CDD Level", CDD_LEVELS, index=default_idx, horizontal=True)
+status = st.selectbox("Case Status", CASE_STATUSES, index=1 if existing_case.get("status") == CASE_STATUS_IN_REVIEW else 0)
 notes = st.text_area("Investigation notes", value=existing_case.get("notes", ""), height=140)
 outcome_reason = st.text_input("Resolution reason (required if resolving without STR)", value=existing_case.get("resolution", ""))
 attachment_names = st.text_input(
@@ -163,8 +174,8 @@ if save_col.button("Save Case Workspace"):
             "cdd_level": cdd_level,
             "notes": notes,
             "resolution": outcome_reason,
-            "str_required": cdd_level == "Enhanced",
-            "kyc_risk_tier": "High" if cdd_level == "Enhanced" else ("Medium" if cdd_level == "Standard" else "Low"),
+            "str_required": cdd_level == CDD_LEVEL_ENHANCED,
+            "kyc_risk_tier": "High" if cdd_level == CDD_LEVEL_ENHANCED else ("Medium" if cdd_level == CDD_LEVEL_STANDARD else "Low"),
         },
     )
     attachment_list = [item.strip() for item in attachment_names.split(",") if item.strip()]
@@ -201,11 +212,11 @@ if escalate_col.button("Escalate to STR", disabled=not escalate_enabled):
     updated_case = update_case_record(
         existing_case["case_id"],
         {
-            "status": "Escalated",
+            "status": CASE_STATUS_ESCALATED,
             "cdd_level": cdd_level,
             "notes": notes,
             "str_required": True,
-            "kyc_risk_tier": "High" if cdd_level == "Enhanced" else existing_case.get("kyc_risk_tier", "Medium"),
+            "kyc_risk_tier": "High" if cdd_level == CDD_LEVEL_ENHANCED else existing_case.get("kyc_risk_tier", "Medium"),
         },
     )
     st.session_state["str_case"] = {
@@ -251,7 +262,7 @@ if resolve_col.button("Resolve - No STR Required"):
         updated_case = update_case_record(
             existing_case["case_id"],
             {
-                "status": "Resolved",
+                "status": CASE_STATUS_RESOLVED,
                 "cdd_level": cdd_level,
                 "notes": notes,
                 "resolution": outcome_reason,
@@ -259,7 +270,7 @@ if resolve_col.button("Resolve - No STR Required"):
             },
         )
         status_map = st.session_state.get("alert_status", {})
-        status_map[str(selected_txn["transaction_id"])] = {"status": "Dismissed", "reason": outcome_reason}
+        status_map[str(selected_txn["transaction_id"])] = {"status": ALERT_STATUS_DISMISSED, "reason": outcome_reason}
         st.session_state["alert_status"] = status_map
         log_action(
             action="case_resolved_no_str",

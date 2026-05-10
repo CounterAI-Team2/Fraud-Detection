@@ -3,6 +3,8 @@ from __future__ import annotations
 import pandas as pd
 import numpy as np
 
+from utils.constants import OFF_HOURS_END, OFF_HOURS_START
+
 SAML_REQUIRED_COLUMNS = [
     "Time",
     "Date",
@@ -63,7 +65,7 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
 
     parsed_date = pd.to_datetime(out["Date"], errors="coerce")
     out["day_of_week"] = parsed_date.dt.dayofweek.fillna(0).astype(int)
-    out["is_off_hours"] = ((out["hour"] < 6) | (out["hour"] >= 22)).astype(int)
+    out["is_off_hours"] = ((out["hour"] < OFF_HOURS_START) | (out["hour"] >= OFF_HOURS_END)).astype(int)
 
     # Convenience fields for UX and filtering
     out["transaction_id"] = out.index.astype(str)

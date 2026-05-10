@@ -5,7 +5,7 @@ import streamlit as st
 
 from utils.audit_helpers import log_alert_dismissed, log_alert_escalated, log_prediction_feedback
 from utils.aml_services import ensure_case_for_transaction, ensure_scored_defaults, record_hitl_feedback
-from utils.constants import ALERT_QUEUE_DISPLAY_LIMIT, RISK_TIER_COLORS
+from utils.constants import ALERT_QUEUE_DISPLAY_LIMIT, ALERT_STATUS_DISMISSED, ALERT_STATUS_ESCALATED, ALERT_STATUS_NEW, RISK_TIER_COLORS
 from utils.session_utils import get_current_analyst, require_scored_df
 
 st.title("2. Alert Queue")
@@ -21,7 +21,7 @@ status_map = st.session_state.get("alert_status", {})
 # Apply status from session state to dataframe view
 view = scored_df.copy()
 view["transaction_id"] = view["transaction_id"].astype(str)
-view["Status"] = view["transaction_id"].map(lambda x: status_map.get(x, {}).get("status", "New"))
+view["Status"] = view["transaction_id"].map(lambda x: status_map.get(x, {}).get("status", ALERT_STATUS_NEW))
 view["Dismiss_Reason"] = view["transaction_id"].map(lambda x: status_map.get(x, {}).get("reason", ""))
 
 st.subheader("Filters")
@@ -48,7 +48,7 @@ view = view[view["Payment_type"].astype(str).isin(selected_pt)]
 
 # Priority sorting + dismissed to bottom
 priority = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
-status_rank = {"Dismissed": 1, "New": 0, "Escalated": 0}
+status_rank = {ALERT_STATUS_DISMISSED: 1, ALERT_STATUS_NEW: 0, ALERT_STATUS_ESCALATED: 0}
 view["_prio"] = view["risk_tier"].map(priority).fillna(99)
 view["_status_rank"] = view["Status"].map(status_rank).fillna(0)
 view = view.sort_values(["_status_rank", "_prio", "risk_score"], ascending=[True, True, False])
@@ -70,7 +70,7 @@ feedback_options = ["False Positive", "False Negative", "Needs retraining", "Oth
 for _, row in view.head(ALERT_QUEUE_DISPLAY_LIMIT).iterrows():
     txid = str(row["transaction_id"])
     color = RISK_TIER_COLORS.get(row["risk_tier"], "#e0e0e0")
-    status = status_map.get(txid, {}).get("status", "New")
+    status = status_map.get(txid, {}).get("status", ALERT_STATUS_NEW)
 
     with st.container(border=True):
         st.markdown(f"<div style='padding:6px;background:{color};border-radius:6px;color:black'><b>{row['risk_tier']}</b> | Txn {txid} | Status: {status}</div>", unsafe_allow_html=True)
@@ -95,12 +95,12 @@ for _, row in view.head(ALERT_QUEUE_DISPLAY_LIMIT).iterrows():
                 }
             )
 
-        if status == "Dismissed":
+        if status == ALERT_STATUS_DISMISSED:
             st.caption(f"Dismiss reason: {status_map.get(txid, {}).get('reason', '')}")
 
         a1, a2, a3 = st.columns([1, 1, 2])
         if a1.button("Investigate", key=f"inv_{txid}"):
-            status_map[txid] = {"status": "Escalated", "reason": status_map.get(txid, {}).get("reason", "")}
+            status_map[txid] = {"status": ALERT_STATUS_ESCALATED, "reason": status_map.get(txid, {}).get("reason", "")}
             st.session_state["alert_status"] = status_map
             st.session_state["selected_txn_id"] = txid
             case = ensure_case_for_transaction(row, analyst_id)
@@ -110,7 +110,7 @@ for _, row in view.head(ALERT_QUEUE_DISPLAY_LIMIT).iterrows():
 
         dismiss_reason = a3.selectbox("Dismiss reason", reasons, key=f"reason_{txid}")
         if a2.button("Dismiss", key=f"dis_{txid}"):
-            status_map[txid] = {"status": "Dismissed", "reason": dismiss_reason}
+            status_map[txid] = {"status": ALERT_STATUS_DISMISSED, "reason": dismiss_reason}
             st.session_state["alert_status"] = status_map
             log_alert_dismissed(txid, analyst_id, actor_role, dismiss_reason, float(row["risk_score"]))
             st.rerun()

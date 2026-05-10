@@ -5,6 +5,14 @@ from typing import Any
 
 import pandas as pd
 
+from utils.constants import (
+    ALERT_THRESHOLDS,
+    CASE_CLOSED_STATUSES,
+    CASE_OPEN_STATUSES,
+    CASE_STATUS_OPEN,
+    CDD_LEVEL_STANDARD,
+    HIGH_VALUE_THRESHOLD,
+)
 from utils.data_store import (
     CASE_COLUMNS,
     CUSTOMER_COLUMNS,
@@ -16,6 +24,7 @@ from utils.data_store import (
     get_customers,
     get_hitl_feedback,
     get_model_registry,
+    get_str_cases,
     get_watchlist,
     make_case_id,
     make_customer_id,
@@ -26,12 +35,6 @@ from utils.data_store import (
     upsert_str_case,
     utc_now_iso,
 )
-
-ALERT_THRESHOLDS = {
-    "Critical": 0.85,
-    "High": 0.70,
-    "Medium": 0.50,
-}
 
 
 def score_to_tier(score: float) -> str:
@@ -62,7 +65,7 @@ def ensure_scored_defaults(scored_df: pd.DataFrame) -> pd.DataFrame:
     df["risk_tier"] = df["risk_score"].apply(score_to_tier)
     df["customer_id"] = df["Sender_account"].astype(str).apply(make_customer_id)
     df["amount_value"] = pd.to_numeric(df["Amount"], errors="coerce").fillna(0.0)
-    df["is_high_value"] = df["amount_value"] >= 10000
+    df["is_high_value"] = df["amount_value"] >= HIGH_VALUE_THRESHOLD
     return df
 
 
@@ -161,9 +164,9 @@ def ensure_case_for_transaction(txn: pd.Series, owner: str) -> dict[str, Any]:
         "account_id": str(txn["Sender_account"]),
         "alert_score": float(txn["risk_score"]),
         "alert_tier": str(txn["risk_tier"]),
-        "status": "Open",
+        "status": CASE_STATUS_OPEN,
         "owner": owner,
-        "cdd_level": "Standard",
+        "cdd_level": CDD_LEVEL_STANDARD,
         "kyc_risk_tier": str(txn["risk_tier"]),
         "str_required": False,
         "opened_at": utc_now_iso(),
@@ -190,7 +193,7 @@ def update_case_record(case_id: str, updates: dict[str, Any]) -> dict[str, Any]:
     row = matches.iloc[0].to_dict()
     row.update(updates)
     row["updated_at"] = utc_now_iso()
-    if row.get("status") in {"Resolved", "Archived"} and not row.get("closed_at"):
+    if row.get("status") in CASE_CLOSED_STATUSES and not row.get("closed_at"):
         row["closed_at"] = utc_now_iso()
     return upsert_case(row)
 
@@ -252,6 +255,15 @@ def record_hitl_feedback(transaction_id: str, customer_id: str, original_predict
     )
 
 
+def get_all_str_records() -> pd.DataFrame:
+    """Return all STR records from str_cases sorted by last update descending."""
+    cases = get_str_cases()
+    if cases.empty:
+        return cases
+    cases["updated_at"] = pd.to_datetime(cases["updated_at"], errors="coerce")
+    return cases.sort_values("updated_at", ascending=False).reset_index(drop=True)
+
+
 def upsert_str_workflow(case_row: dict[str, Any], grounds: str, status: str, updates: dict[str, Any] | None = None) -> dict[str, Any]:
     payload = {
         "str_id": case_row.get("str_id", ""),
@@ -290,7 +302,7 @@ def build_dashboard_metrics(scored_df: pd.DataFrame) -> dict[str, Any]:
     if not cases.empty:
         cases["opened_at_dt"] = pd.to_datetime(cases["opened_at"], errors="coerce", utc=True)
         cases["updated_at_dt"] = pd.to_datetime(cases["updated_at"], errors="coerce", utc=True)
-        open_cases = cases[cases["status"].isin(["Open", "In Review", "Escalated"])]
+        open_cases = cases[cases["status"].isin(CASE_OPEN_STATUSES)]
         open_by_tier = open_cases.groupby("alert_tier").size().to_dict()
 
         acted = cases[cases["updated_at_dt"].notna() & cases["opened_at_dt"].notna()].copy()
@@ -301,7 +313,7 @@ def build_dashboard_metrics(scored_df: pd.DataFrame) -> dict[str, Any]:
 
         alerts_cleared_today = int(
             cases[
-                (cases["status"].isin(["Resolved", "Archived"]))
+                (cases["status"].isin(CASE_CLOSED_STATUSES))
                 & (cases["updated_at_dt"].dt.date == now.date())
             ].shape[0]
         )
