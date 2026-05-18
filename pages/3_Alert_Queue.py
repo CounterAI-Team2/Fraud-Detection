@@ -8,7 +8,7 @@ from utils.aml_services import ensure_case_for_transaction, ensure_scored_defaul
 from utils.constants import ALERT_QUEUE_DISPLAY_LIMIT, ALERT_STATUS_DISMISSED, ALERT_STATUS_ESCALATED, ALERT_STATUS_NEW, RISK_TIER_COLORS
 from utils.session_utils import get_current_analyst, require_scored_df
 
-st.title("2. Alert Queue")
+st.title("3. Alert Queue")
 
 require_scored_df()
 scored_df = st.session_state["scored_df"]
@@ -106,7 +106,7 @@ for _, row in view.head(ALERT_QUEUE_DISPLAY_LIMIT).iterrows():
             case = ensure_case_for_transaction(row, analyst_id)
             st.session_state["selected_case_id"] = case["case_id"]
             log_alert_escalated(txid, case["case_id"], analyst_id, actor_role, row["risk_tier"], float(row["risk_score"]))
-            st.switch_page("pages/3_Case_Investigation.py")
+            st.switch_page("pages/4_Case_Investigation.py")
 
         dismiss_reason = a3.selectbox("Dismiss reason", reasons, key=f"reason_{txid}")
         if a2.button("Dismiss", key=f"dis_{txid}"):

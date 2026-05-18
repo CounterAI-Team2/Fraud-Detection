@@ -7,13 +7,16 @@ import streamlit as st
 
 from utils.audit_logger import log_action
 from utils.aml_services import ensure_scored_defaults, sync_customer_profiles
+from utils.kyc_store import ensure_kyc_database, upgrade_kyc_risk_from_transactions
 from utils.constants import ALERT_STATUS_NEW, DATA_PREVIEW_LIMIT
 from utils.data_store import get_model_registry
 from utils.feature_engineering import CATEGORICAL_FEATURES, ENGINEERED_FEATURES, SAML_REQUIRED_COLUMNS, engineer_features, prepare_model_matrix, validate_schema
 from utils.model_loader import load_models
 from utils.session_utils import get_current_analyst
 
-st.title("1. Data Upload")
+st.title("2. Data Upload")
+
+ensure_kyc_database()
 st.caption("Upload a transaction CSV, validate schema, engineer AML features, score risk, and persist customer profiles for downstream review.")
 
 uploaded = st.file_uploader("Upload CSV", type=["csv"])
@@ -60,6 +63,7 @@ if uploaded is not None:
     st.session_state["scored_df"] = feat
     st.session_state["alert_status"] = statuses
     customer_profiles = sync_customer_profiles(feat)
+    upgraded_kyc_ids = upgrade_kyc_risk_from_transactions(feat)
 
     elapsed = time.time() - t0
 
@@ -69,6 +73,11 @@ if uploaded is not None:
     current_model = registry[-1] if registry else {}
 
     st.success("Dataset processed successfully.")
+    if upgraded_kyc_ids:
+        st.warning(
+            "KYC risk upgraded to **Medium** for customer ID(s) linked to suspicious transactions: "
+            + ", ".join(f"`{cid}`" for cid in upgraded_kyc_ids)
+        )
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Transactions Scored", f"{len(feat):,}")
     c2.metric("Flagged Above Threshold", f"{flagged_count:,}")

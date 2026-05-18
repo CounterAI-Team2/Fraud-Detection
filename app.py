@@ -3,10 +3,12 @@ from __future__ import annotations
 import streamlit as st
 
 from utils.data_store import ensure_reference_data
+from utils.kyc_store import ensure_kyc_database
 from utils.model_loader import ensure_model_registry_entry
 
 st.set_page_config(page_title="CounterAI AML Platform", layout="wide")
 ensure_reference_data()
+ensure_kyc_database()
 ensure_model_registry_entry()
 
 st.title("CounterAI AML Platform - Roadmap Build")
@@ -29,9 +31,9 @@ with st.sidebar:
         ["Admin", "Analyst", "Compliance Officer", "Senior Management"],
         index=["Admin", "Analyst", "Compliance Officer", "Senior Management"].index(st.session_state["current_actor_role"]),
     )
-    st.caption("Use the sidebar page navigation to access Upload, Queue, KYC, CDD, STR, Audit, Dashboard, and Governance modules.")
+    st.caption("Use the sidebar to access KYC, Upload, Queue, Investigation, STR, Audit, Dashboard, and Governance.")
 
 st.markdown(
-    "Use the sidebar to navigate: **Data Upload -> Alert Queue -> Case Investigation -> KYC & Screening -> STR Generation -> Audit Log -> Management Dashboard -> AI Governance**"
+    "Use the sidebar to navigate: **KYC & Customer Registry -> Data Upload -> Alert Queue -> Case Investigation -> STR Generation -> Audit Log -> Management Dashboard -> AI Governance**"
 )
 st.info("Models are pre-trained and loaded from `models/rf_model.pkl`, `models/cart_model.pkl`, and `models/logit_model.pkl`.")

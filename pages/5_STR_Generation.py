@@ -19,7 +19,7 @@ from utils.data_store import get_str_cases
 from utils.session_utils import get_current_analyst
 from utils.str_builder import build_default_grounds, make_reference_number
 
-st.title("4. STR Generation")
+st.title("5. STR Generation")
 
 STATUS_BADGE: dict[str, str] = {
     STR_STATUS_DRAFT:    "⚪ Draft",

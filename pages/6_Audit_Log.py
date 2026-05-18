@@ -6,7 +6,7 @@ import streamlit as st
 from utils.audit_logger import read_audit_events, read_audit_log
 from utils.session_utils import get_current_analyst
 
-st.title("5. Audit Log")
+st.title("6. Audit Log")
 
 current_actor, actor_role = get_current_analyst()
 events = pd.DataFrame(read_audit_events())

@@ -33,7 +33,7 @@ from utils.model_loader import load_models
 from utils.session_utils import get_current_analyst, require_scored_df
 from utils.shap_explainer import get_model_xai_explanation
 
-st.title("3. Case Investigation")
+st.title("4. Case Investigation")
 
 require_scored_df()
 scored_df = st.session_state["scored_df"]
@@ -253,7 +253,7 @@ if escalate_col.button("Escalate to STR", disabled=not escalate_enabled):
             "str_required": True,
         },
     )
-    st.switch_page("pages/4_STR_Generation.py")
+    st.switch_page("pages/5_STR_Generation.py")
 
 if resolve_col.button("Resolve - No STR Required"):
     if not outcome_reason.strip():
