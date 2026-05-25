@@ -4,12 +4,19 @@ import streamlit as st
 
 from utils.data_store import ensure_reference_data
 from utils.kyc_store import ensure_kyc_database
+from utils.mas_sanctions_sync import sync_mas_sanctions
 from utils.model_loader import ensure_model_registry_entry
 
 st.set_page_config(page_title="CounterAI AML Platform", layout="wide")
 ensure_reference_data()
 ensure_kyc_database()
 ensure_model_registry_entry()
+
+# Sync MAS sanctions lists once per session at launch. Failures degrade to
+# the cached/bundled name list and are surfaced on the KYC page.
+if not st.session_state.get("mas_sync_done"):
+    st.session_state["mas_sync_result"] = sync_mas_sanctions().to_dict()
+    st.session_state["mas_sync_done"] = True
 
 st.title("CounterAI AML Platform - Roadmap Build")
 

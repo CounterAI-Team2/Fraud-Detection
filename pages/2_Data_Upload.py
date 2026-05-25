@@ -7,7 +7,7 @@ import streamlit as st
 
 from utils.audit_logger import log_action
 from utils.aml_services import ensure_scored_defaults, sync_customer_profiles
-from utils.kyc_store import ensure_kyc_database, upgrade_kyc_risk_from_transactions
+from utils.kyc_store import apply_cdd_escalation_from_transactions, ensure_kyc_database
 from utils.constants import ALERT_STATUS_NEW, DATA_PREVIEW_LIMIT
 from utils.data_store import get_model_registry
 from utils.feature_engineering import CATEGORICAL_FEATURES, ENGINEERED_FEATURES, SAML_REQUIRED_COLUMNS, engineer_features, prepare_model_matrix, validate_schema
@@ -63,7 +63,7 @@ if uploaded is not None:
     st.session_state["scored_df"] = feat
     st.session_state["alert_status"] = statuses
     customer_profiles = sync_customer_profiles(feat)
-    upgraded_kyc_ids = upgrade_kyc_risk_from_transactions(feat)
+    cdd_changes = apply_cdd_escalation_from_transactions(feat)
 
     elapsed = time.time() - t0
 
@@ -73,11 +73,32 @@ if uploaded is not None:
     current_model = registry[-1] if registry else {}
 
     st.success("Dataset processed successfully.")
-    if upgraded_kyc_ids:
+    if cdd_changes:
+        change_lines = [
+            f"- `{c['id']}` {c['FullName']}: RiskStatus {c['old_risk']} -> **{c['new_risk']}**, "
+            f"CDD {c['old_cdd']} -> **{c['new_cdd']}** (triggered by {c['trigger_tier']} txn)"
+            for c in cdd_changes
+        ]
         st.warning(
-            "KYC risk upgraded to **Medium** for customer ID(s) linked to suspicious transactions: "
-            + ", ".join(f"`{cid}`" for cid in upgraded_kyc_ids)
+            "KYC profiles auto-escalated based on flagged transactions:\n\n"
+            + "\n".join(change_lines)
         )
+        for change in cdd_changes:
+            log_action(
+                action="kyc_cdd_auto_escalated",
+                details=(
+                    f"customer_id={change['id']}; "
+                    f"risk {change['old_risk']}->{change['new_risk']}; "
+                    f"cdd {change['old_cdd']}->{change['new_cdd']}"
+                ),
+                analyst_id=analyst_id,
+                module="kyc_screening",
+                event_type="kyc_cdd_auto_escalated",
+                entity_type="customer",
+                entity_id=change["id"],
+                actor_role=actor_role,
+                payload=change,
+            )
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Transactions Scored", f"{len(feat):,}")
     c2.metric("Flagged Above Threshold", f"{flagged_count:,}")

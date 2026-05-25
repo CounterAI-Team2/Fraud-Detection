@@ -27,8 +27,14 @@ from utils.constants import (
     CDD_LEVELS,
     RISK_TIER_COLORS,
 )
+from utils.cdd_rules import recommend_for_case
 from utils.data_store import get_customers, upsert_customers
 from utils.feature_engineering import CATEGORICAL_FEATURES, ENGINEERED_FEATURES, prepare_model_matrix
+from utils.kyc_store import (
+    SANCTIONS_REVIEW_PENDING,
+    get_kyc_by_account,
+    update_kyc_record,
+)
 from utils.model_loader import load_models
 from utils.session_utils import get_current_analyst, require_scored_df
 from utils.shap_explainer import get_model_xai_explanation
@@ -153,7 +159,32 @@ customers = get_customers()
 customer_mask = customers["customer_id"].astype(str) == str(selected_txn["customer_id"])
 customer_row = customers[customer_mask].iloc[0] if not customers.empty and customer_mask.any() else None
 
-default_cdd = existing_case.get("cdd_level", CDD_LEVEL_STANDARD)
+kyc_row = get_kyc_by_account(str(selected_txn["Sender_account"]))
+sanctions_pending = bool(kyc_row) and str(kyc_row.get("SanctionsReview", "")) == SANCTIONS_REVIEW_PENDING
+recommended_cdd = recommend_for_case(kyc_row, str(selected_txn["risk_tier"]), sanctions_pending=sanctions_pending)
+
+if kyc_row:
+    info_cols = st.columns(4)
+    info_cols[0].metric("KYC Customer", kyc_row["FullName"])
+    info_cols[1].metric("KYC ID", kyc_row["id"])
+    info_cols[2].metric("KYC Risk", kyc_row["RiskStatus"])
+    info_cols[3].metric("KYC CDD", kyc_row["CDDLevel"])
+    if sanctions_pending:
+        st.error(
+            f"Sanctions review pending for {kyc_row['FullName']} - additional CDD checks required before close."
+        )
+    if recommended_cdd != kyc_row["CDDLevel"]:
+        st.info(
+            f"Recommended CDD level based on this {selected_txn['risk_tier']} alert: **{recommended_cdd}** "
+            f"(current KYC level: {kyc_row['CDDLevel']})."
+        )
+else:
+    st.caption(
+        f"No KYC record found for sender account `{selected_txn['Sender_account']}`. "
+        "Enrol the customer on page 1 to enable CDD recommendations."
+    )
+
+default_cdd = existing_case.get("cdd_level") or recommended_cdd or CDD_LEVEL_STANDARD
 default_idx = CDD_LEVELS.index(default_cdd) if default_cdd in CDD_LEVELS else 1
 cdd_level = st.radio("CDD Level", CDD_LEVELS, index=default_idx, horizontal=True)
 status = st.selectbox("Case Status", CASE_STATUSES, index=1 if existing_case.get("status") == CASE_STATUS_IN_REVIEW else 0)
@@ -187,6 +218,15 @@ if save_col.button("Save Case Workspace"):
         customers.loc[customer_mask, "last_review_date"] = str(pd.Timestamp.utcnow().date())
         customers.loc[customer_mask, "updated_at"] = datetime.now().isoformat()
         upsert_customers(customers)
+
+    if kyc_row:
+        update_kyc_record(
+            kyc_row["id"],
+            {
+                "CDDLevel": cdd_level,
+                "RiskStatus": updated_case["kyc_risk_tier"],
+            },
+        )
 
     log_action(
         action="cdd_case_updated",

@@ -1,0 +1,28 @@
+from __future__ import annotations
+
+from utils.cdd_rules import recommend_cdd_level, recommend_for_case, recommend_risk_status
+
+
+def test_risk_status_only_promotes():
+    assert recommend_risk_status("Low", "Medium") == "Medium"
+    assert recommend_risk_status("Low", "Critical") == "High"
+    assert recommend_risk_status("High", "Medium") == "High"
+    assert recommend_risk_status("Medium", "Low") == "Medium"
+
+
+def test_cdd_level_only_promotes():
+    assert recommend_cdd_level("Simplified", "Medium", "Medium") == "Standard"
+    assert recommend_cdd_level("Standard", "High", "Critical") == "Enhanced"
+    assert recommend_cdd_level("Enhanced", "Low", "Low") == "Enhanced"
+
+
+def test_sanctions_pending_forces_enhanced():
+    assert recommend_cdd_level("Simplified", "Low", "Low", sanctions_pending=True) == "Enhanced"
+
+
+def test_recommend_for_case_uses_kyc_row():
+    kyc = {"CDDLevel": "Simplified", "RiskStatus": "Low"}
+    assert recommend_for_case(kyc, "Medium") == "Standard"
+    assert recommend_for_case(kyc, "Critical") == "Enhanced"
+    # Missing KYC row should still recommend a sensible default for a flagged txn.
+    assert recommend_for_case(None, "High") == "Enhanced"
