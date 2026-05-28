@@ -24,11 +24,21 @@ KYC_COLUMNS = [
     "SanctionsReview",
     "LastCDDReviewAt",
     "Comments",
+    # --- 4-level risk additions ---
+    "IsPEP",           # "Yes" / "No" / ""
+    "FlaggedBy",       # analyst id who last set Critical
+    "FlaggedReason",   # FLAG_REASON_* constant
+    "SMApprovalStatus",# SM_APPROVAL_* constant
+    "SMApprovedBy",    # SM actor id
+    "SMApprovedAt",    # ISO timestamp
 ]
 
-RISK_LOW = "Low"
-RISK_MEDIUM = "Medium"
-RISK_HIGH = "High"
+RISK_LOW      = "Low"
+RISK_MEDIUM   = "Medium"
+RISK_HIGH     = "High"
+RISK_CRITICAL = "Critical"
+
+CUSTOMER_RISK_STATUSES = [RISK_LOW, RISK_MEDIUM, RISK_HIGH, RISK_CRITICAL]
 
 CDD_SIMPLIFIED = "Simplified"
 CDD_STANDARD = "Standard"
@@ -59,6 +69,12 @@ def _seed_row(
         "SanctionsReview": SANCTIONS_REVIEW_NONE,
         "LastCDDReviewAt": "",
         "Comments": comments,
+        "IsPEP": "",
+        "FlaggedBy": "",
+        "FlaggedReason": "",
+        "SMApprovalStatus": "",
+        "SMApprovedBy": "",
+        "SMApprovedAt": "",
     }
 
 
@@ -132,6 +148,7 @@ def ensure_kyc_database() -> None:
             if changed:
                 df[KYC_COLUMNS].to_csv(KYC_PATH, index=False)
             return
+
     seed = pd.DataFrame(MOCK_KYC_ROWS, columns=KYC_COLUMNS)
     seed.to_csv(KYC_PATH, index=False)
 
@@ -226,6 +243,12 @@ def enrol_customer(
         "SanctionsReview": sanctions_review,
         "LastCDDReviewAt": _utc_now_iso(),
         "Comments": comments.strip(),
+        "IsPEP": "",
+        "FlaggedBy": "",
+        "FlaggedReason": "",
+        "SMApprovalStatus": "",
+        "SMApprovedBy": "",
+        "SMApprovedAt": "",
     }
     customers = pd.concat([customers, pd.DataFrame([row])], ignore_index=True)
     save_kyc_customers(customers)
@@ -317,4 +340,168 @@ def apply_cdd_escalation_from_transactions(scored_df: pd.DataFrame) -> list[dict
 
     if changes:
         save_kyc_customers(customers)
+    return changes
+
+
+# ---------------------------------------------------------------------------
+# 4-level risk management
+# ---------------------------------------------------------------------------
+
+_RISK_RANK: dict[str, int] = {RISK_LOW: 0, RISK_MEDIUM: 1, RISK_HIGH: 2, RISK_CRITICAL: 3}
+_RISK_TO_CDD: dict[str, str] = {
+    RISK_LOW:      CDD_SIMPLIFIED,
+    RISK_MEDIUM:   CDD_STANDARD,
+    RISK_HIGH:     CDD_ENHANCED,
+    RISK_CRITICAL: CDD_ENHANCED,
+}
+
+
+def set_customer_risk_status(
+    customer_id: str,
+    new_status: str,
+    actor_id: str,
+    reason: str = "",
+    is_pep: bool | None = None,
+) -> dict[str, str] | None:
+    """
+    Manually promote or demote a customer's RiskStatus to any of the 4 levels.
+
+    - Promotes CDDLevel to match the new risk (never auto-demotes CDD when demoting risk,
+      so an analyst must explicitly lower CDD via Case Investigation).
+    - When new_status == RISK_CRITICAL, sets SMApprovalStatus = "Pending".
+    - When demoting away from Critical, clears the SM approval fields.
+    - is_pep=True/False explicitly sets IsPEP; None leaves it unchanged.
+
+    Returns the updated row dict, or None if the customer was not found.
+    """
+    from utils.constants import SM_APPROVAL_PENDING  # avoid circular at module level
+
+    customers = get_kyc_customers()
+    mask = customers["id"].astype(str) == str(customer_id)
+    if not mask.any():
+        return None
+
+    row = customers.loc[mask].iloc[0]
+    old_status = str(row["RiskStatus"])
+    new_cdd = _RISK_TO_CDD.get(new_status, CDD_SIMPLIFIED)
+
+    # Only promote CDD; analysts demote CDD explicitly via Case Investigation.
+    old_cdd_rank = {CDD_SIMPLIFIED: 0, CDD_STANDARD: 1, CDD_ENHANCED: 2}.get(str(row["CDDLevel"]), 0)
+    new_cdd_rank = {CDD_SIMPLIFIED: 0, CDD_STANDARD: 1, CDD_ENHANCED: 2}.get(new_cdd, 0)
+    applied_cdd = new_cdd if new_cdd_rank >= old_cdd_rank else str(row["CDDLevel"])
+
+    updates: dict[str, str] = {
+        "RiskStatus": new_status,
+        "CDDLevel": applied_cdd,
+        "FlaggedBy": actor_id,
+        "FlaggedReason": reason or "Manual",
+    }
+
+    if new_status == RISK_CRITICAL:
+        updates["SMApprovalStatus"] = SM_APPROVAL_PENDING
+        updates["SMApprovedBy"] = ""
+        updates["SMApprovedAt"] = ""
+    elif old_status == RISK_CRITICAL:
+        # Demoting away from Critical — clear approval fields
+        updates["SMApprovalStatus"] = ""
+        updates["SMApprovedBy"] = ""
+        updates["SMApprovedAt"] = ""
+
+    if is_pep is True:
+        updates["IsPEP"] = "Yes"
+    elif is_pep is False:
+        updates["IsPEP"] = "No"
+
+    return update_kyc_record(customer_id, updates)
+
+
+def approve_critical_customer(customer_id: str, sm_actor_id: str) -> dict[str, str] | None:
+    """Senior Management approves a Critical-flagged customer."""
+    from utils.constants import SM_APPROVAL_APPROVED
+
+    return update_kyc_record(customer_id, {
+        "SMApprovalStatus": SM_APPROVAL_APPROVED,
+        "SMApprovedBy": sm_actor_id,
+        "SMApprovedAt": _utc_now_iso(),
+    })
+
+
+def reject_critical_flag(customer_id: str, sm_actor_id: str, reason: str = "") -> dict[str, str] | None:
+    """
+    Senior Management rejects the Critical flag.  RiskStatus is stepped back to High
+    so the customer retains Enhanced CDD but no longer requires SM sign-off.
+    """
+    from utils.constants import SM_APPROVAL_REJECTED
+
+    return update_kyc_record(customer_id, {
+        "RiskStatus": RISK_HIGH,
+        "CDDLevel": CDD_ENHANCED,
+        "SMApprovalStatus": SM_APPROVAL_REJECTED,
+        "SMApprovedBy": sm_actor_id,
+        "SMApprovedAt": _utc_now_iso(),
+        "FlaggedReason": reason or "Rejected by SM",
+    })
+
+
+def scan_pep_column(upload_df: pd.DataFrame) -> list[dict[str, str]]:
+    """
+    Template hook: scan an uploaded DataFrame for a PEP indicator column.
+
+    Looks for columns named IsPEP / is_pep / PEP / pep (case-insensitive).
+    Rows where the value is truthy ("yes", "true", "1", "y") are promoted to
+    Critical in the KYC database if their AccountNo is already registered.
+
+    Returns a list of change dicts for audit logging:
+        [{"id", "FullName", "AccountNo", "old_risk", "new_risk"}, ...]
+
+    Extensibility note: future rule engines can call this pattern — accept a
+    DataFrame, match against registered customers, call set_customer_risk_status,
+    and return a change list.
+    """
+    from utils.constants import FLAG_REASON_PEP
+
+    pep_col = next(
+        (c for c in upload_df.columns if c.strip().lower() in {"ispep", "is_pep", "pep"}),
+        None,
+    )
+    if pep_col is None:
+        return []
+
+    _truthy = {"yes", "true", "1", "y"}
+    pep_accounts = set(
+        upload_df.loc[
+            upload_df[pep_col].astype(str).str.strip().str.lower().isin(_truthy),
+            "Sender_account",
+        ].astype(str).str.strip().tolist()
+    ) if "Sender_account" in upload_df.columns else set()
+
+    if not pep_accounts:
+        return []
+
+    customers = get_kyc_customers()
+    changes: list[dict[str, str]] = []
+
+    for _, row in customers.iterrows():
+        account = str(row["AccountNo"]).strip()
+        if account not in pep_accounts:
+            continue
+        if str(row.get("IsPEP", "")).strip().lower() == "yes":
+            continue  # already flagged
+
+        old_risk = str(row["RiskStatus"])
+        set_customer_risk_status(
+            customer_id=str(row["id"]),
+            new_status=RISK_CRITICAL,
+            actor_id="system",
+            reason=FLAG_REASON_PEP,
+            is_pep=True,
+        )
+        changes.append({
+            "id": str(row["id"]),
+            "FullName": str(row["FullName"]),
+            "AccountNo": account,
+            "old_risk": old_risk,
+            "new_risk": RISK_CRITICAL,
+        })
+
     return changes
