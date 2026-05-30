@@ -14,6 +14,14 @@ hitl = datasets["hitl"]
 cases = datasets["cases"]
 registry = datasets["registry"]
 
+_k1, _k2, _k3, _k4 = st.columns(4)
+_k1.metric("Override Rate", round(len(hitl) / max(len(cases), 1), 4) if not hitl.empty else "—")
+_k2.metric("HITL Corrections", len(hitl))
+_k3.metric("Model Version", registry.iloc[-1]["version"] if not registry.empty else "—")
+_k4.metric("Drift Status", "Active" if not cases.empty else "Awaiting data")
+
+st.divider()
+
 st.subheader("Drift Monitor")
 if cases.empty:
     st.info("Case activity is required before drift indicators can be calculated.")

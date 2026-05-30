@@ -318,64 +318,6 @@ def enrol_customer_dialog() -> None:
         st.error(str(exc))
 
 
-_render_sanctions_status()
-
-customers = get_kyc_customers()
-
-success_msg = st.session_state.pop("kyc_enrol_success", None)
-if success_msg:
-    st.success(success_msg)
-
-metric_col1, metric_col2, metric_col3, metric_col4, metric_col5, metric_col6 = st.columns(6)
-metric_col1.metric("Enrolled Customers", len(customers))
-metric_col2.metric("Low Risk",      int(customers["RiskStatus"].astype(str).str.lower().eq("low").sum()))
-metric_col3.metric("Medium Risk",   int(customers["RiskStatus"].astype(str).str.lower().eq("medium").sum()))
-metric_col4.metric("High Risk",     int(customers["RiskStatus"].astype(str).str.lower().eq("high").sum()))
-metric_col5.metric("Critical Risk", int(customers["RiskStatus"].astype(str).str.lower().eq("critical").sum()))
-metric_col6.metric(
-    "Sanctions Pending",
-    int(customers["SanctionsReview"].astype(str).eq(SANCTIONS_REVIEW_PENDING).sum()),
-)
-
-if st.button("Enrol New Customer", type="primary"):
-    enrol_customer_dialog()
-
-if st.session_state.pop("kyc_open_enrol_dialog", False):
-    enrol_customer_dialog()
-
-search = st.text_input("Search by name, ID, or account number", value="")
-view = customers.copy()
-if search.strip():
-    needle = search.strip().lower()
-    view = view[
-        view["FullName"].astype(str).str.lower().str.contains(needle)
-        | view["id"].astype(str).str.lower().str.contains(needle)
-        | view["AccountNo"].astype(str).str.lower().str.contains(needle)
-    ]
-
-st.subheader("Customer Database")
-if view.empty:
-    st.info("No customers match your search.")
-else:
-    if search.strip():
-        st.caption(f"Showing {len(view)} of {len(customers)} customers")
-
-    display_cols = {
-        "id": "ID",
-        "FullName": "Full Name",
-        "AccountNo": "Account No",
-        "ContactNo": "Contact No",
-        "RiskStatus": "Risk Status",
-        "CDDLevel": "CDD Level",
-        "IsPEP": "PEP",
-        "SanctionsReview": "Sanctions Review",
-        "SMApprovalStatus": "SM Approval",
-        "LastCDDReviewAt": "Last CDD Review",
-    }
-    display_view = view[[c for c in display_cols if c in view.columns]].rename(columns=display_cols)
-    st.dataframe(display_view, use_container_width=True, hide_index=True)
-
-
 @st.dialog("Manage Customer Risk Status")
 def manage_risk_dialog(customer_id: str) -> None:
     customers_now = get_kyc_customers()
@@ -471,24 +413,89 @@ def manage_risk_dialog(customer_id: str) -> None:
         st.rerun()
 
 
-st.subheader("Manage Customer Risk")
-st.caption("Select a customer to promote, demote, or flag as PEP.")
+_tab_registry, _tab_sanctions, _tab_risk = st.tabs(["Customer Registry", "Sanctions Status", "Manage Risk"])
 
-customers_for_select = get_kyc_customers()
-name_map = {
-    str(r["id"]): f"{r['FullName']} ({r['id']})"
-    for _, r in customers_for_select.iterrows()
-}
-selected_id = st.selectbox(
-    "Select customer",
-    options=[""] + list(name_map.keys()),
-    format_func=lambda x: "— select —" if x == "" else name_map.get(x, x),
-)
-if selected_id and st.button("Open Risk Manager", type="secondary"):
-    manage_risk_dialog(selected_id)
+# ── Tab 1: Customer Registry ──────────────────────────────────────────────────
+with _tab_registry:
+    customers = get_kyc_customers()
 
-st.caption(
-    "This MVP registry simulates a bank's KYC feed and overlays MAS sanctions screening "
-    "so the AML workflow is end-to-end demonstrable. In production it would consume the "
-    "bank's existing customer master and vendor screening data via API."
-)
+    success_msg = st.session_state.pop("kyc_enrol_success", None)
+    if success_msg:
+        st.success(success_msg)
+
+    metric_col1, metric_col2, metric_col3, metric_col4, metric_col5, metric_col6 = st.columns(6)
+    metric_col1.metric("Enrolled Customers", len(customers))
+    metric_col2.metric("Low Risk",      int(customers["RiskStatus"].astype(str).str.lower().eq("low").sum()))
+    metric_col3.metric("Medium Risk",   int(customers["RiskStatus"].astype(str).str.lower().eq("medium").sum()))
+    metric_col4.metric("High Risk",     int(customers["RiskStatus"].astype(str).str.lower().eq("high").sum()))
+    metric_col5.metric("Critical Risk", int(customers["RiskStatus"].astype(str).str.lower().eq("critical").sum()))
+    metric_col6.metric(
+        "Sanctions Pending",
+        int(customers["SanctionsReview"].astype(str).eq(SANCTIONS_REVIEW_PENDING).sum()),
+    )
+
+    if st.button("Enrol New Customer", type="primary"):
+        enrol_customer_dialog()
+
+    if st.session_state.pop("kyc_open_enrol_dialog", False):
+        enrol_customer_dialog()
+
+    search = st.text_input("Search by name, ID, or account number", value="")
+    view = customers.copy()
+    if search.strip():
+        needle = search.strip().lower()
+        view = view[
+            view["FullName"].astype(str).str.lower().str.contains(needle)
+            | view["id"].astype(str).str.lower().str.contains(needle)
+            | view["AccountNo"].astype(str).str.lower().str.contains(needle)
+        ]
+
+    st.subheader("Customer Database")
+    if view.empty:
+        st.info("No customers match your search.")
+    else:
+        if search.strip():
+            st.caption(f"Showing {len(view)} of {len(customers)} customers")
+
+        display_cols = {
+            "id": "ID",
+            "FullName": "Full Name",
+            "AccountNo": "Account No",
+            "ContactNo": "Contact No",
+            "RiskStatus": "Risk Status",
+            "CDDLevel": "CDD Level",
+            "IsPEP": "PEP",
+            "SanctionsReview": "Sanctions Review",
+            "SMApprovalStatus": "SM Approval",
+            "LastCDDReviewAt": "Last CDD Review",
+        }
+        display_view = view[[c for c in display_cols if c in view.columns]].rename(columns=display_cols)
+        st.dataframe(display_view, use_container_width=True, hide_index=True)
+
+# ── Tab 2: Sanctions Status ───────────────────────────────────────────────────
+with _tab_sanctions:
+    _render_sanctions_status()
+
+# ── Tab 3: Manage Risk ────────────────────────────────────────────────────────
+with _tab_risk:
+    st.subheader("Manage Customer Risk")
+    st.caption("Select a customer to promote, demote, or flag as PEP.")
+
+    customers_for_select = get_kyc_customers()
+    name_map = {
+        str(r["id"]): f"{r['FullName']} ({r['id']})"
+        for _, r in customers_for_select.iterrows()
+    }
+    selected_id = st.selectbox(
+        "Select customer",
+        options=[""] + list(name_map.keys()),
+        format_func=lambda x: "— select —" if x == "" else name_map.get(x, x),
+    )
+    if selected_id and st.button("Open Risk Manager", type="secondary"):
+        manage_risk_dialog(selected_id)
+
+    st.caption(
+        "This MVP registry simulates a bank's KYC feed and overlays MAS sanctions screening "
+        "so the AML workflow is end-to-end demonstrable. In production it would consume the "
+        "bank's existing customer master and vendor screening data via API."
+    )

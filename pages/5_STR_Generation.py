@@ -120,7 +120,16 @@ with tab2:
         str_record = upsert_str_workflow(existing_str or str_case, build_default_grounds(str_case), starting_status)
         st.session_state["current_str_id"] = str_record["str_id"]
 
-        st.write(f"Current Status: **{STATUS_BADGE.get(str_record['status'], str_record['status'])}**")
+        _stages = [STR_STATUS_DRAFT, STR_STATUS_L1, STR_STATUS_L2, STR_STATUS_APPROVED, STR_STATUS_ARCHIVED]
+        _cur_idx = _stages.index(str_record["status"]) if str_record["status"] in _stages else 0
+        _pipeline_parts = []
+        for _i, _s in enumerate(_stages):
+            _lbl = STATUS_BADGE.get(_s, _s)
+            if _i == _cur_idx:
+                _pipeline_parts.append(f"<span style='background:#1e88e5;color:white;padding:4px 10px;border-radius:12px'><b>{_lbl}</b></span>")
+            else:
+                _pipeline_parts.append(f"<span style='background:#444;color:#aaa;padding:4px 10px;border-radius:12px'>{_lbl}</span>")
+        st.markdown(" &nbsp;→&nbsp; ".join(_pipeline_parts), unsafe_allow_html=True)
 
         report_date = st.date_input("Report Date", value=date.today())
         institution = st.text_input("Reporting Institution", value=INSTITUTION_NAME)
