@@ -15,13 +15,17 @@ from utils.model_loader import load_models
 from utils.session_utils import get_current_analyst
 
 st.title("2. Data Upload")
+st.caption("Upload a transaction CSV, validate schema, engineer AML features, score risk, and persist customer profiles.")
 
 ensure_kyc_database()
-st.caption("Upload a transaction CSV, validate schema, engineer AML features, score risk, and persist customer profiles for downstream review.")
 
-uploaded = st.file_uploader("Upload CSV", type=["csv"])
-cap_rows = st.number_input("Demo row cap (for speed)", min_value=1000, max_value=200000, value=50000, step=1000)
-threshold = st.slider("Risk threshold", min_value=0.05, max_value=0.95, value=0.50, step=0.05)
+_up_col, _opt_col = st.columns([3, 1])
+with _up_col:
+    uploaded = st.file_uploader("Upload SAML-D transaction CSV", type=["csv"])
+with _opt_col:
+    st.markdown("**Scoring Options**")
+    cap_rows = st.number_input("Row cap", min_value=1000, max_value=200000, value=50000, step=1000, help="Limit rows processed for speed")
+    threshold = st.slider("Risk threshold", min_value=0.05, max_value=0.95, value=0.50, step=0.05)
 
 
 if uploaded is not None:
@@ -105,7 +109,9 @@ if uploaded is not None:
     c3.metric("Processing Time", f"{elapsed:.2f}s")
     c4.metric("Customer Profiles Synced", f"{len(customer_profiles):,}")
 
-    st.write("Tier Counts", tier_counts)
+    _tc = st.columns(4)
+    for _i, _tier in enumerate(["Critical", "High", "Medium", "Low"]):
+        _tc[_i].metric(_tier, tier_counts.get(_tier, 0))
     if current_model:
         st.caption(
             "Current model registry entry: "
@@ -168,4 +174,5 @@ if uploaded is not None:
     )
 
 else:
-    st.info("Expected columns:\n" + ", ".join(SAML_REQUIRED_COLUMNS))
+    with st.expander("Expected CSV columns"):
+        st.code(", ".join(SAML_REQUIRED_COLUMNS))

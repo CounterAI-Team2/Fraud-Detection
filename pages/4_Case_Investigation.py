@@ -76,255 +76,260 @@ c2.metric("Status", existing_case.get("status", CASE_STATUS_OPEN))
 c3.metric("Risk Tier", selected_txn["risk_tier"])
 c4.metric("Risk Score", f"{float(selected_txn['risk_score']):.3f}")
 
-st.subheader("Transaction Details")
-d1, d2 = st.columns([2, 1])
-with d1:
-    st.write(f"Transaction ID: `{selected_txn['transaction_id']}`")
-    st.write(f"Date/Time: `{selected_txn['Date']} {selected_txn['Time']}`")
-    st.write(f"Sender Account: `{selected_txn['Sender_account']}`")
-    st.write(f"Receiver Account: `{selected_txn['Receiver_account']}`")
-    st.write(f"Amount: `{float(selected_txn['Amount']):,.2f}`")
-    st.write(f"Payment Type: `{selected_txn['Payment_type']}`")
-    st.write(f"Sender Bank Location: `{selected_txn['Sender_bank_location']}`")
-    st.write(f"Receiver Bank Location: `{selected_txn['Receiver_bank_location']}`")
-    st.write(f"Payment Currency: `{selected_txn['Payment_currency']}`")
-    st.write(f"Received Currency: `{selected_txn['Received_currency']}`")
-with d2:
-    st.markdown(
-        f"<div style='font-size:28px;font-weight:700;color:{tier_color}'>{'Flagged' if int(selected_txn['rf_prediction']) == 1 else 'Not flagged'}</div>"
-        f"<div style='padding:6px;border-radius:8px;background:{tier_color};color:black;font-weight:700'>{selected_txn['risk_tier']}</div>",
-        unsafe_allow_html=True,
-    )
+_left, _right = st.columns([2, 3])
 
-st.subheader("Model Explainability (CART + Logistic)")
-rf_model, cart_model, logit_model = load_models()
-x = prepare_model_matrix(scored_df[ENGINEERED_FEATURES + CATEGORICAL_FEATURES], rf_model.feature_names_in_)
+with _left:
+    with st.container(border=True):
+        st.markdown("**Transaction Details**")
+        st.write(f"Transaction ID: `{selected_txn['transaction_id']}`")
+        st.write(f"Date/Time: `{selected_txn['Date']} {selected_txn['Time']}`")
+        st.write(f"Sender Account: `{selected_txn['Sender_account']}`")
+        st.write(f"Receiver Account: `{selected_txn['Receiver_account']}`")
+        st.write(f"Amount: `{float(selected_txn['Amount']):,.2f}`")
+        st.write(f"Payment Type: `{selected_txn['Payment_type']}`")
+        st.write(f"Sender Bank Location: `{selected_txn['Sender_bank_location']}`")
+        st.write(f"Receiver Bank Location: `{selected_txn['Receiver_bank_location']}`")
+        st.write(f"Payment Currency: `{selected_txn['Payment_currency']}`")
+        st.write(f"Received Currency: `{selected_txn['Received_currency']}`")
+        st.markdown(
+            f"<div style='font-size:28px;font-weight:700;color:{tier_color}'>{'Flagged' if int(selected_txn['rf_prediction']) == 1 else 'Not flagged'}</div>"
+            f"<div style='padding:6px;border-radius:8px;background:{tier_color};color:black;font-weight:700'>{selected_txn['risk_tier']}</div>",
+            unsafe_allow_html=True,
+        )
 
-idx = rows.index[0]
-row_for_shap = x.loc[[idx]].copy()
+    with st.container(border=True):
+        st.markdown("**CDD Decisioning**")
+        customers = get_customers()
+        customer_mask = customers["customer_id"].astype(str) == str(selected_txn["customer_id"])
+        customer_row = customers[customer_mask].iloc[0] if not customers.empty and customer_mask.any() else None
 
-try:
-    top_features, plain_text, bullets = get_model_xai_explanation(cart_model, logit_model, row_for_shap, list(x.columns))
-except Exception as e:
-    import sys
-    print(f"WARNING: XAI explanation failed: {e}", file=sys.stderr)
-    top_features = [("amount_log", 0.0), ("cross_border", 0.0), ("cross_currency", 0.0)]
-    plain_text = "This transaction was flagged primarily due to a combination of network and transaction risk indicators."
-    bullets = [
-        "- sender transacts with unusually many unique receivers (fan-out)",
-        "- transaction amount is significantly above typical",
-        "- transaction crosses international borders",
-    ]
+        kyc_row = get_kyc_by_account(str(selected_txn["Sender_account"]))
+        sanctions_pending = bool(kyc_row) and str(kyc_row.get("SanctionsReview", "")) == SANCTIONS_REVIEW_PENDING
+        recommended_cdd = recommend_for_case(kyc_row, str(selected_txn["risk_tier"]), sanctions_pending=sanctions_pending)
 
-st.session_state["shap_top3_text"] = "; ".join([f for f, _ in top_features[:3]])
-plot_df = pd.DataFrame(top_features, columns=["feature", "shap_value"]).sort_values(
-    "shap_value", key=lambda s: s.abs(), ascending=True
-)
+        if kyc_row:
+            info_cols = st.columns(4)
+            info_cols[0].metric("KYC Customer", kyc_row["FullName"])
+            info_cols[1].metric("KYC ID", kyc_row["id"])
+            info_cols[2].metric("KYC Risk", kyc_row["RiskStatus"])
+            info_cols[3].metric("KYC CDD", kyc_row["CDDLevel"])
+            if sanctions_pending:
+                st.error(
+                    f"Sanctions review pending for {kyc_row['FullName']} - additional CDD checks required before close."
+                )
+            if recommended_cdd != kyc_row["CDDLevel"]:
+                st.info(
+                    f"Recommended CDD level based on this {selected_txn['risk_tier']} alert: **{recommended_cdd}** "
+                    f"(current KYC level: {kyc_row['CDDLevel']})."
+                )
+        else:
+            st.caption(
+                f"No KYC record found for sender account `{selected_txn['Sender_account']}`. "
+                "Enrol the customer on page 1 to enable CDD recommendations."
+            )
 
-fig, ax = plt.subplots(figsize=(8, 3.5))
-ax.barh(plot_df["feature"], plot_df["shap_value"], color="#42a5f5")
-ax.set_xlabel("Combined contribution (CART importance + Logistic local effect)")
-ax.set_ylabel("Feature")
-st.pyplot(fig)
-st.write(plain_text)
-for feature_name, feature_value in top_features[:5]:
-    arrow = "up" if feature_value >= 0 else "down"
-    st.write(f"- {feature_name}: risk {arrow} ({feature_value:.4f})")
-for bullet in bullets:
-    st.markdown(bullet)
+        default_cdd = existing_case.get("cdd_level") or recommended_cdd or CDD_LEVEL_STANDARD
+        default_idx = CDD_LEVELS.index(default_cdd) if default_cdd in CDD_LEVELS else 1
+        cdd_level = st.radio("CDD Level", CDD_LEVELS, index=default_idx, horizontal=True)
+        status = st.selectbox("Case Status", CASE_STATUSES, index=1 if existing_case.get("status") == CASE_STATUS_IN_REVIEW else 0)
+        notes = st.text_area("Investigation notes", value=existing_case.get("notes", ""), height=140)
+        outcome_reason = st.text_input("Resolution reason (required if resolving without STR)", value=existing_case.get("resolution", ""))
+        attachment_names = st.text_input(
+            "Attachment names (comma separated metadata only)",
+            value=existing_case.get("attachment_names", ""),
+            help="MVP stores attachment metadata only.",
+        )
 
-st.subheader("Related Transactions (+/-30 days)")
-related = get_related_transactions(scored_df, selected_txn, window_days=30)
-if related.empty:
-    st.info("No related transactions found in the review window.")
-else:
-    st.dataframe(
-        related[
-            [
-                "transaction_id",
-                "Date",
-                "Time",
-                "Receiver_account",
-                "Amount",
-                "risk_score",
-                "risk_tier",
-                "highlight_reason",
+        save_col, escalate_col, resolve_col = st.columns(3)
+        if save_col.button("Save Case Workspace"):
+            updated_case = update_case_record(
+                existing_case["case_id"],
+                {
+                    "status": status,
+                    "cdd_level": cdd_level,
+                    "notes": notes,
+                    "resolution": outcome_reason,
+                    "str_required": cdd_level == CDD_LEVEL_ENHANCED,
+                    "kyc_risk_tier": "High" if cdd_level == CDD_LEVEL_ENHANCED else ("Medium" if cdd_level == CDD_LEVEL_STANDARD else "Low"),
+                },
+            )
+            attachment_list = [item.strip() for item in attachment_names.split(",") if item.strip()]
+            updated_case = attach_case_files(updated_case["case_id"], attachment_list)
+
+            if customer_row is not None:
+                customers.loc[customer_mask, "cdd_level"] = cdd_level
+                customers.loc[customer_mask, "kyc_risk_tier"] = updated_case["kyc_risk_tier"]
+                customers.loc[customer_mask, "last_review_date"] = str(pd.Timestamp.utcnow().date())
+                customers.loc[customer_mask, "updated_at"] = datetime.now().isoformat()
+                upsert_customers(customers)
+
+            if kyc_row:
+                update_kyc_record(
+                    kyc_row["id"],
+                    {
+                        "CDDLevel": cdd_level,
+                        "RiskStatus": updated_case["kyc_risk_tier"],
+                    },
+                )
+
+            log_action(
+                action="cdd_case_updated",
+                transaction_id=str(selected_txn["transaction_id"]),
+                details=f"case_id={updated_case['case_id']}; cdd_level={cdd_level}; status={status}",
+                analyst_id=analyst_id,
+                module="cdd_module",
+                event_type="cdd_case_updated",
+                entity_type="case",
+                entity_id=updated_case["case_id"],
+                actor_role=actor_role,
+                payload={
+                    "cdd_level": cdd_level,
+                    "status": status,
+                    "notes_length": len(notes),
+                    "attachment_count": len(attachment_list),
+                },
+            )
+            st.success("Case workspace saved.")
+
+        escalate_enabled = bool(notes.strip())
+        if escalate_col.button("Escalate to STR", disabled=not escalate_enabled):
+            updated_case = update_case_record(
+                existing_case["case_id"],
+                {
+                    "status": CASE_STATUS_ESCALATED,
+                    "cdd_level": cdd_level,
+                    "notes": notes,
+                    "str_required": True,
+                    "kyc_risk_tier": "High" if cdd_level == CDD_LEVEL_ENHANCED else existing_case.get("kyc_risk_tier", "Medium"),
+                },
+            )
+            st.session_state["str_case"] = {
+                "case_id": updated_case["case_id"],
+                "customer_id": str(selected_txn["customer_id"]),
+                "customer_name": customer_row["customer_name"] if customer_row is not None else "",
+                "transaction_id": str(selected_txn["transaction_id"]),
+                "date": str(selected_txn["Date"]),
+                "sender_account": str(selected_txn["Sender_account"]),
+                "receiver_account": str(selected_txn["Receiver_account"]),
+                "amount": float(selected_txn["Amount"]),
+                "payment_type": str(selected_txn["Payment_type"]),
+                "risk_score": float(selected_txn["risk_score"]),
+                "risk_tier": str(selected_txn["risk_tier"]),
+                "cdd_level": cdd_level,
+                "investigation_notes": notes,
+                "shap_top3": st.session_state.get("shap_top3_text", ""),
+                "escalated_at": datetime.now().isoformat(),
+                "escalated_by": analyst_id,
+            }
+            log_action(
+                action="case_escalated_to_str",
+                transaction_id=str(selected_txn["transaction_id"]),
+                details=f"case_id={updated_case['case_id']}; cdd_level={cdd_level}",
+                analyst_id=analyst_id,
+                module="cdd_module",
+                event_type="case_escalated_to_str",
+                entity_type="case",
+                entity_id=updated_case["case_id"],
+                actor_role=actor_role,
+                payload={
+                    "cdd_level": cdd_level,
+                    "notes_length": len(notes),
+                    "str_required": True,
+                },
+            )
+            st.switch_page("pages/5_STR_Generation.py")
+
+        if resolve_col.button("Resolve - No STR Required"):
+            if not outcome_reason.strip():
+                st.error("Please provide a resolution reason.")
+            else:
+                updated_case = update_case_record(
+                    existing_case["case_id"],
+                    {
+                        "status": CASE_STATUS_RESOLVED,
+                        "cdd_level": cdd_level,
+                        "notes": notes,
+                        "resolution": outcome_reason,
+                        "str_required": False,
+                    },
+                )
+                status_map = st.session_state.get("alert_status", {})
+                status_map[str(selected_txn["transaction_id"])] = {"status": ALERT_STATUS_DISMISSED, "reason": outcome_reason}
+                st.session_state["alert_status"] = status_map
+                log_action(
+                    action="case_resolved_no_str",
+                    transaction_id=str(selected_txn["transaction_id"]),
+                    details=f"case_id={updated_case['case_id']}; cdd_level={cdd_level}; reason={outcome_reason}",
+                    analyst_id=analyst_id,
+                    module="cdd_module",
+                    event_type="case_resolved_no_str",
+                    entity_type="case",
+                    entity_id=updated_case["case_id"],
+                    actor_role=actor_role,
+                    payload={
+                        "cdd_level": cdd_level,
+                        "reason": outcome_reason,
+                    },
+                )
+                st.success("Case resolved without STR.")
+
+with _right:
+    with st.container(border=True):
+        st.markdown("**Model Explainability (CART + Logistic)**")
+        rf_model, cart_model, logit_model = load_models()
+        x = prepare_model_matrix(scored_df[ENGINEERED_FEATURES + CATEGORICAL_FEATURES], rf_model.feature_names_in_)
+
+        idx = rows.index[0]
+        row_for_shap = x.loc[[idx]].copy()
+
+        try:
+            top_features, plain_text, bullets = get_model_xai_explanation(cart_model, logit_model, row_for_shap, list(x.columns))
+        except Exception as e:
+            import sys
+            print(f"WARNING: XAI explanation failed: {e}", file=sys.stderr)
+            top_features = [("amount_log", 0.0), ("cross_border", 0.0), ("cross_currency", 0.0)]
+            plain_text = "This transaction was flagged primarily due to a combination of network and transaction risk indicators."
+            bullets = [
+                "- sender transacts with unusually many unique receivers (fan-out)",
+                "- transaction amount is significantly above typical",
+                "- transaction crosses international borders",
             ]
-        ],
-        use_container_width=True,
-    )
 
-st.subheader("CDD Decisioning")
-customers = get_customers()
-customer_mask = customers["customer_id"].astype(str) == str(selected_txn["customer_id"])
-customer_row = customers[customer_mask].iloc[0] if not customers.empty and customer_mask.any() else None
-
-kyc_row = get_kyc_by_account(str(selected_txn["Sender_account"]))
-sanctions_pending = bool(kyc_row) and str(kyc_row.get("SanctionsReview", "")) == SANCTIONS_REVIEW_PENDING
-recommended_cdd = recommend_for_case(kyc_row, str(selected_txn["risk_tier"]), sanctions_pending=sanctions_pending)
-
-if kyc_row:
-    info_cols = st.columns(4)
-    info_cols[0].metric("KYC Customer", kyc_row["FullName"])
-    info_cols[1].metric("KYC ID", kyc_row["id"])
-    info_cols[2].metric("KYC Risk", kyc_row["RiskStatus"])
-    info_cols[3].metric("KYC CDD", kyc_row["CDDLevel"])
-    if sanctions_pending:
-        st.error(
-            f"Sanctions review pending for {kyc_row['FullName']} - additional CDD checks required before close."
-        )
-    if recommended_cdd != kyc_row["CDDLevel"]:
-        st.info(
-            f"Recommended CDD level based on this {selected_txn['risk_tier']} alert: **{recommended_cdd}** "
-            f"(current KYC level: {kyc_row['CDDLevel']})."
-        )
-else:
-    st.caption(
-        f"No KYC record found for sender account `{selected_txn['Sender_account']}`. "
-        "Enrol the customer on page 1 to enable CDD recommendations."
-    )
-
-default_cdd = existing_case.get("cdd_level") or recommended_cdd or CDD_LEVEL_STANDARD
-default_idx = CDD_LEVELS.index(default_cdd) if default_cdd in CDD_LEVELS else 1
-cdd_level = st.radio("CDD Level", CDD_LEVELS, index=default_idx, horizontal=True)
-status = st.selectbox("Case Status", CASE_STATUSES, index=1 if existing_case.get("status") == CASE_STATUS_IN_REVIEW else 0)
-notes = st.text_area("Investigation notes", value=existing_case.get("notes", ""), height=140)
-outcome_reason = st.text_input("Resolution reason (required if resolving without STR)", value=existing_case.get("resolution", ""))
-attachment_names = st.text_input(
-    "Attachment names (comma separated metadata only)",
-    value=existing_case.get("attachment_names", ""),
-    help="MVP stores attachment metadata only.",
-)
-
-save_col, escalate_col, resolve_col = st.columns(3)
-if save_col.button("Save Case Workspace"):
-    updated_case = update_case_record(
-        existing_case["case_id"],
-        {
-            "status": status,
-            "cdd_level": cdd_level,
-            "notes": notes,
-            "resolution": outcome_reason,
-            "str_required": cdd_level == CDD_LEVEL_ENHANCED,
-            "kyc_risk_tier": "High" if cdd_level == CDD_LEVEL_ENHANCED else ("Medium" if cdd_level == CDD_LEVEL_STANDARD else "Low"),
-        },
-    )
-    attachment_list = [item.strip() for item in attachment_names.split(",") if item.strip()]
-    updated_case = attach_case_files(updated_case["case_id"], attachment_list)
-
-    if customer_row is not None:
-        customers.loc[customer_mask, "cdd_level"] = cdd_level
-        customers.loc[customer_mask, "kyc_risk_tier"] = updated_case["kyc_risk_tier"]
-        customers.loc[customer_mask, "last_review_date"] = str(pd.Timestamp.utcnow().date())
-        customers.loc[customer_mask, "updated_at"] = datetime.now().isoformat()
-        upsert_customers(customers)
-
-    if kyc_row:
-        update_kyc_record(
-            kyc_row["id"],
-            {
-                "CDDLevel": cdd_level,
-                "RiskStatus": updated_case["kyc_risk_tier"],
-            },
+        st.session_state["shap_top3_text"] = "; ".join([f for f, _ in top_features[:3]])
+        plot_df = pd.DataFrame(top_features, columns=["feature", "shap_value"]).sort_values(
+            "shap_value", key=lambda s: s.abs(), ascending=True
         )
 
-    log_action(
-        action="cdd_case_updated",
-        transaction_id=str(selected_txn["transaction_id"]),
-        details=f"case_id={updated_case['case_id']}; cdd_level={cdd_level}; status={status}",
-        analyst_id=analyst_id,
-        module="cdd_module",
-        event_type="cdd_case_updated",
-        entity_type="case",
-        entity_id=updated_case["case_id"],
-        actor_role=actor_role,
-        payload={
-            "cdd_level": cdd_level,
-            "status": status,
-            "notes_length": len(notes),
-            "attachment_count": len(attachment_list),
-        },
-    )
-    st.success("Case workspace saved.")
+        fig, ax = plt.subplots(figsize=(8, 3.5))
+        ax.barh(plot_df["feature"], plot_df["shap_value"], color="#42a5f5")
+        ax.set_xlabel("Combined contribution (CART importance + Logistic local effect)")
+        ax.set_ylabel("Feature")
+        st.pyplot(fig)
+        st.write(plain_text)
+        for feature_name, feature_value in top_features[:5]:
+            arrow = "up" if feature_value >= 0 else "down"
+            st.write(f"- {feature_name}: risk {arrow} ({feature_value:.4f})")
+        for bullet in bullets:
+            st.markdown(bullet)
 
-escalate_enabled = bool(notes.strip())
-if escalate_col.button("Escalate to STR", disabled=not escalate_enabled):
-    updated_case = update_case_record(
-        existing_case["case_id"],
-        {
-            "status": CASE_STATUS_ESCALATED,
-            "cdd_level": cdd_level,
-            "notes": notes,
-            "str_required": True,
-            "kyc_risk_tier": "High" if cdd_level == CDD_LEVEL_ENHANCED else existing_case.get("kyc_risk_tier", "Medium"),
-        },
-    )
-    st.session_state["str_case"] = {
-        "case_id": updated_case["case_id"],
-        "customer_id": str(selected_txn["customer_id"]),
-        "customer_name": customer_row["customer_name"] if customer_row is not None else "",
-        "transaction_id": str(selected_txn["transaction_id"]),
-        "date": str(selected_txn["Date"]),
-        "sender_account": str(selected_txn["Sender_account"]),
-        "receiver_account": str(selected_txn["Receiver_account"]),
-        "amount": float(selected_txn["Amount"]),
-        "payment_type": str(selected_txn["Payment_type"]),
-        "risk_score": float(selected_txn["risk_score"]),
-        "risk_tier": str(selected_txn["risk_tier"]),
-        "cdd_level": cdd_level,
-        "investigation_notes": notes,
-        "shap_top3": st.session_state.get("shap_top3_text", ""),
-        "escalated_at": datetime.now().isoformat(),
-        "escalated_by": analyst_id,
-    }
-    log_action(
-        action="case_escalated_to_str",
-        transaction_id=str(selected_txn["transaction_id"]),
-        details=f"case_id={updated_case['case_id']}; cdd_level={cdd_level}",
-        analyst_id=analyst_id,
-        module="cdd_module",
-        event_type="case_escalated_to_str",
-        entity_type="case",
-        entity_id=updated_case["case_id"],
-        actor_role=actor_role,
-        payload={
-            "cdd_level": cdd_level,
-            "notes_length": len(notes),
-            "str_required": True,
-        },
-    )
-    st.switch_page("pages/5_STR_Generation.py")
-
-if resolve_col.button("Resolve - No STR Required"):
-    if not outcome_reason.strip():
-        st.error("Please provide a resolution reason.")
-    else:
-        updated_case = update_case_record(
-            existing_case["case_id"],
-            {
-                "status": CASE_STATUS_RESOLVED,
-                "cdd_level": cdd_level,
-                "notes": notes,
-                "resolution": outcome_reason,
-                "str_required": False,
-            },
-        )
-        status_map = st.session_state.get("alert_status", {})
-        status_map[str(selected_txn["transaction_id"])] = {"status": ALERT_STATUS_DISMISSED, "reason": outcome_reason}
-        st.session_state["alert_status"] = status_map
-        log_action(
-            action="case_resolved_no_str",
-            transaction_id=str(selected_txn["transaction_id"]),
-            details=f"case_id={updated_case['case_id']}; cdd_level={cdd_level}; reason={outcome_reason}",
-            analyst_id=analyst_id,
-            module="cdd_module",
-            event_type="case_resolved_no_str",
-            entity_type="case",
-            entity_id=updated_case["case_id"],
-            actor_role=actor_role,
-            payload={
-                "cdd_level": cdd_level,
-                "reason": outcome_reason,
-            },
-        )
-        st.success("Case resolved without STR.")
+    with st.container(border=True):
+        st.markdown("**Related Transactions (+/−30 days)**")
+        related = get_related_transactions(scored_df, selected_txn, window_days=30)
+        if related.empty:
+            st.info("No related transactions found in the review window.")
+        else:
+            st.dataframe(
+                related[
+                    [
+                        "transaction_id",
+                        "Date",
+                        "Time",
+                        "Receiver_account",
+                        "Amount",
+                        "risk_score",
+                        "risk_tier",
+                        "highlight_reason",
+                    ]
+                ],
+                use_container_width=True,
+            )

@@ -9,6 +9,7 @@ from utils.constants import ALERT_QUEUE_DISPLAY_LIMIT, ALERT_STATUS_DISMISSED, A
 from utils.session_utils import get_current_analyst, require_scored_df
 
 st.title("3. Alert Queue")
+st.caption("Review scored transactions, dismiss false positives, or escalate to case investigation.")
 
 require_scored_df()
 scored_df = st.session_state["scored_df"]
@@ -81,20 +82,6 @@ for _, row in view.head(ALERT_QUEUE_DISPLAY_LIMIT).iterrows():
         c4.write(f"Timestamp: `{row['Date']} {row['Time']}`")
         c5.write(f"Risk Score: `{float(row['risk_score']):.3f}`")
 
-        with st.expander("Explainability Snapshot"):
-            st.write(
-                f"Plain-English drivers: counterparty fan-out/fan-in, cross-border/currency behavior, and amount profile for alert `{txid}`."
-            )
-            st.write(
-                {
-                    "risk_score": round(float(row["risk_score"]), 4),
-                    "tier": row["risk_tier"],
-                    "cross_border": int(row["cross_border"]),
-                    "cross_currency": int(row["cross_currency"]),
-                    "high_value": bool(row["is_high_value"]),
-                }
-            )
-
         if status == ALERT_STATUS_DISMISSED:
             st.caption(f"Dismiss reason: {status_map.get(txid, {}).get('reason', '')}")
 
@@ -115,16 +102,30 @@ for _, row in view.head(ALERT_QUEUE_DISPLAY_LIMIT).iterrows():
             log_alert_dismissed(txid, analyst_id, actor_role, dismiss_reason, float(row["risk_score"]))
             st.rerun()
 
-        feedback_label = st.selectbox("Prediction correction", feedback_options, key=f"feedback_{txid}")
-        feedback_reason = st.text_input("Correction reason", key=f"feedback_reason_{txid}")
-        if st.button("Log HITL Feedback", key=f"feedback_btn_{txid}"):
-            record_hitl_feedback(
-                transaction_id=txid,
-                customer_id=str(row["customer_id"]),
-                original_prediction="Flagged" if int(row["rf_prediction"]) == 1 else "Not flagged",
-                corrected_label=feedback_label,
-                reason=feedback_reason or "No reason provided",
-                actor_id=analyst_id,
+        with st.expander("Explainability & Prediction Feedback"):
+            st.write(
+                f"Plain-English drivers: counterparty fan-out/fan-in, cross-border/currency behavior, and amount profile for alert `{txid}`."
             )
-            log_prediction_feedback(txid, analyst_id, actor_role, feedback_label, feedback_reason, int(row["rf_prediction"]))
-            st.success("HITL feedback captured.")
+            st.write(
+                {
+                    "risk_score": round(float(row["risk_score"]), 4),
+                    "tier": row["risk_tier"],
+                    "cross_border": int(row["cross_border"]),
+                    "cross_currency": int(row["cross_currency"]),
+                    "high_value": bool(row["is_high_value"]),
+                }
+            )
+            st.divider()
+            feedback_label = st.selectbox("Prediction correction", feedback_options, key=f"feedback_{txid}")
+            feedback_reason = st.text_input("Correction reason", key=f"feedback_reason_{txid}")
+            if st.button("Log HITL Feedback", key=f"feedback_btn_{txid}"):
+                record_hitl_feedback(
+                    transaction_id=txid,
+                    customer_id=str(row["customer_id"]),
+                    original_prediction="Flagged" if int(row["rf_prediction"]) == 1 else "Not flagged",
+                    corrected_label=feedback_label,
+                    reason=feedback_reason or "No reason provided",
+                    actor_id=analyst_id,
+                )
+                log_prediction_feedback(txid, analyst_id, actor_role, feedback_label, feedback_reason, int(row["rf_prediction"]))
+                st.success("HITL feedback captured.")

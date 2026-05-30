@@ -19,7 +19,10 @@ with tab1:
         st.info("No v2 audit events recorded yet.")
     else:
         events["timestamp_utc"] = pd.to_datetime(events["timestamp_utc"], errors="coerce", utc=True)
-        st.metric("Total Audit Rows", len(events))
+        _m1, _m2, _m3 = st.columns(3)
+        _m1.metric("Total Events", len(events))
+        _m2.metric("Modules", events["module"].dropna().nunique())
+        _m3.metric("Users", events["actor_id"].dropna().nunique())
 
         filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
         with filter_col1:
