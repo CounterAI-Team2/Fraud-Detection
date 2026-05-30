@@ -26,6 +26,32 @@ CDD_LEVEL_STANDARD   = "Standard"
 CDD_LEVEL_ENHANCED   = "Enhanced"
 CDD_LEVELS           = [CDD_LEVEL_SIMPLIFIED, CDD_LEVEL_STANDARD, CDD_LEVEL_ENHANCED]
 
+# --- Customer risk statuses (4-level; distinct from ML transaction risk_tier) ---
+CUSTOMER_RISK_LOW      = "Low"
+CUSTOMER_RISK_MEDIUM   = "Medium"
+CUSTOMER_RISK_HIGH     = "High"
+CUSTOMER_RISK_CRITICAL = "Critical"
+CUSTOMER_RISK_STATUSES = [CUSTOMER_RISK_LOW, CUSTOMER_RISK_MEDIUM, CUSTOMER_RISK_HIGH, CUSTOMER_RISK_CRITICAL]
+
+# CDD level each customer risk status maps to
+CUSTOMER_RISK_TO_CDD: dict[str, str] = {
+    CUSTOMER_RISK_LOW:      CDD_LEVEL_SIMPLIFIED,
+    CUSTOMER_RISK_MEDIUM:   CDD_LEVEL_STANDARD,
+    CUSTOMER_RISK_HIGH:     CDD_LEVEL_ENHANCED,
+    CUSTOMER_RISK_CRITICAL: CDD_LEVEL_ENHANCED,  # Critical = Enhanced CDD + SM approval
+}
+
+# --- Senior Management approval (required for Critical customers) ---
+SM_APPROVAL_PENDING  = "Pending"
+SM_APPROVAL_APPROVED = "Approved"
+SM_APPROVAL_REJECTED = "Rejected"
+SM_APPROVAL_STATUSES = [SM_APPROVAL_PENDING, SM_APPROVAL_APPROVED, SM_APPROVAL_REJECTED]
+
+# --- Flag reasons (why a customer was promoted to Critical) ---
+FLAG_REASON_PEP           = "PEP"
+FLAG_REASON_INVESTIGATION = "Under Investigation"
+FLAG_REASON_MANUAL        = "Manual"
+
 # --- STR workflow states ---
 STR_STATUS_DRAFT    = "Draft"
 STR_STATUS_L1       = "L1Review"

@@ -13,13 +13,18 @@ from utils.kyc_store import (
     CDD_ENHANCED,
     CDD_SIMPLIFIED,
     CDD_STANDARD,
+    RISK_CRITICAL,
     RISK_HIGH,
     RISK_LOW,
     RISK_MEDIUM,
 )
 
-_RISK_RANK = {RISK_LOW: 0, RISK_MEDIUM: 1, RISK_HIGH: 2}
+# Customer RiskStatus rank — Critical is analyst-only, never auto-assigned by transactions.
+_RISK_RANK = {RISK_LOW: 0, RISK_MEDIUM: 1, RISK_HIGH: 2, RISK_CRITICAL: 3}
+
+# Transaction risk_tier rank (ML model output — separate concept from customer RiskStatus).
 _TIER_RANK = {"Low": 0, "Medium": 1, "High": 2, "Critical": 3}
+
 _CDD_RANK = {CDD_SIMPLIFIED: 0, CDD_STANDARD: 1, CDD_ENHANCED: 2}
 
 
@@ -29,12 +34,25 @@ def _normalize(value: str | None, default: str) -> str:
 
 
 def recommend_risk_status(current_risk: str, top_txn_tier: str) -> str:
-    """Promote (never demote) the KYC RiskStatus based on a flagged transaction."""
+    """
+    Promote (never demote) the KYC RiskStatus based on a flagged transaction tier.
+
+    Transaction-based escalation caps at High — Critical is analyst-only and
+    requires explicit manual flagging (see set_customer_risk_status in kyc_store).
+
+    Extensibility note: future transaction rules should call this function with
+    their suggested tier, letting this function arbitrate the final status so that
+    the promote-only invariant is preserved across all callers.
+    """
     current = _normalize(current_risk, RISK_LOW)
     tier = _normalize(top_txn_tier, "Medium")
 
+    # Guard: if current is already Critical, transactions cannot change it.
+    if current == RISK_CRITICAL:
+        return RISK_CRITICAL
+
     if tier in {"Critical", "High"}:
-        target = RISK_HIGH
+        target = RISK_HIGH      # transactions cap at High; Critical is analyst-only
     elif tier == "Medium":
         target = RISK_MEDIUM
     else:
@@ -55,12 +73,16 @@ def recommend_cdd_level(
     Decide the recommended CDD level. Returns the higher of the current level
     and what the inputs would justify (so analysts can downgrade explicitly
     in Case Investigation, but automation never lowers the bar).
+
+    Critical RiskStatus maps to Enhanced CDD; the additional SM-approval
+    requirement is tracked via SMApprovalStatus in the KYC record, not as a
+    separate CDD string.
     """
     current = _normalize(current_cdd, CDD_SIMPLIFIED)
     risk = _normalize(risk_status, RISK_LOW)
     tier = _normalize(top_txn_tier or "", "")
 
-    if sanctions_pending or risk == RISK_HIGH or tier in {"Critical", "High"}:
+    if sanctions_pending or risk in {RISK_HIGH, RISK_CRITICAL} or tier in {"Critical", "High"}:
         target = CDD_ENHANCED
     elif risk == RISK_MEDIUM or tier == "Medium":
         target = CDD_STANDARD
