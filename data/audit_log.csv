@@ -1,3 +1,945 @@
 timestamp,action,transaction_id,details,analyst_id
 2026-05-04T16:39:24.357871,dataset_uploaded,,"filename=test3.csv; row_count=499; flagged_count=85; tiers={'Low': 414, 'Critical': 85}",Analyst
 2026-05-04T17:24:43.578409,dataset_uploaded,,"filename=test3.csv; row_count=499; flagged_count=85; tiers={'Low': 414, 'Critical': 85}",Analyst
+2026-05-30T08:08:39.605338+00:00,kyc_customer_enrolled,,customer_id=9439346921; account=123123; sanctions_match=False,Analyst
+2026-05-30T08:15:34.077815+00:00,kyc_customer_enrolled,,customer_id=5002021938; account=1233; sanctions_match=False; risk_indicators=['PEP (Politically Exposed Person)'],Analyst
+2026-05-30T08:19:22.071218+00:00,critical_customer_approved,,customer_id=5002021938; approved_by=Analyst,Analyst
+2026-05-30T08:20:26.989258+00:00,kyc_customer_enrolled,,"customer_id=2496545705; account=23181490; sanctions_match=False; risk_indicators=['PEP (Politically Exposed Person)', 'High-risk jurisdiction']",Analyst
+2026-05-30T08:24:58.288493+00:00,kyc_customer_enrolled,,customer_id=9742125823; account=148554119051; sanctions_match=False; risk_indicators=['PEP (Politically Exposed Person)'],123
+2026-05-30T08:29:45.870185+00:00,kyc_customer_enrolled,,"customer_id=9272208886; account=13412421; sanctions_match=False; risk_indicators=['PEP (Politically Exposed Person)', 'High-risk jurisdiction']",123
+2026-05-30T08:31:32.744699+00:00,critical_customer_rejected,,customer_id=2496545705; rejected_by=123; demoted to High,123
+2026-05-30T08:31:34.051116+00:00,critical_customer_rejected,,customer_id=9742125823; rejected_by=123; demoted to High,123
+2026-05-30T08:33:06.023306+00:00,critical_customer_approved,,customer_id=9272208886; approved_by=123,123
+2026-05-30T08:39:30.903998+00:00,customer_risk_status_changed,,customer_id=4624222122; old_risk=Low; new_risk=Medium; is_pep=False; reason=i dont like her,123
+2026-05-31T07:48:05.289309+00:00,kyc_customer_enrolled,,"customer_id=3074622059; account=3414213424; sanctions_match=False; risk_indicators=['PEP (Politically Exposed Person)', 'High-risk jurisdiction']",Analyst
+2026-05-31T08:25:52.798840+00:00,critical_customer_approved,,customer_id=3074622059; approved_by=John Doe,John Doe
+2026-05-31T08:27:08.410250+00:00,kyc_cdd_auto_escalated,,customer_id=5519023847; risk Low->Medium; cdd Simplified->Standard,John Doe
+2026-05-31T08:27:08.428412+00:00,kyc_cdd_auto_escalated,,customer_id=6190384721; risk Low->Medium; cdd Simplified->Standard,John Doe
+2026-05-31T08:27:08.452284+00:00,dataset_uploaded,,filename=aml_demo_data.csv; row_count=300; flagged_count=22,John Doe
+2026-05-31T08:27:08.470983+00:00,prediction_generated,0,risk_score=0.1300; risk_tier=Low,John Doe
+2026-05-31T08:27:08.490282+00:00,prediction_generated,1,risk_score=0.1200; risk_tier=Low,John Doe
+2026-05-31T08:27:08.506636+00:00,prediction_generated,2,risk_score=0.5400; risk_tier=Medium,John Doe
+2026-05-31T08:27:08.524076+00:00,prediction_generated,3,risk_score=0.3750; risk_tier=Low,John Doe
+2026-05-31T08:27:08.542509+00:00,prediction_generated,4,risk_score=0.2450; risk_tier=Low,John Doe
+2026-05-31T08:27:08.563514+00:00,prediction_generated,5,risk_score=0.1750; risk_tier=Low,John Doe
+2026-05-31T08:27:08.582524+00:00,prediction_generated,6,risk_score=0.1350; risk_tier=Low,John Doe
+2026-05-31T08:27:08.601165+00:00,prediction_generated,7,risk_score=0.1800; risk_tier=Low,John Doe
+2026-05-31T08:27:08.618928+00:00,prediction_generated,8,risk_score=0.1650; risk_tier=Low,John Doe
+2026-05-31T08:27:08.636820+00:00,prediction_generated,9,risk_score=0.2550; risk_tier=Low,John Doe
+2026-05-31T08:27:08.655204+00:00,prediction_generated,10,risk_score=0.2500; risk_tier=Low,John Doe
+2026-05-31T08:27:08.671561+00:00,prediction_generated,11,risk_score=0.1250; risk_tier=Low,John Doe
+2026-05-31T08:27:08.690110+00:00,prediction_generated,12,risk_score=0.1300; risk_tier=Low,John Doe
+2026-05-31T08:27:08.705980+00:00,prediction_generated,13,risk_score=0.1450; risk_tier=Low,John Doe
+2026-05-31T08:27:08.723533+00:00,prediction_generated,14,risk_score=0.4000; risk_tier=Low,John Doe
+2026-05-31T08:27:08.739932+00:00,prediction_generated,15,risk_score=0.2750; risk_tier=Low,John Doe
+2026-05-31T08:27:08.757198+00:00,prediction_generated,16,risk_score=0.2450; risk_tier=Low,John Doe
+2026-05-31T08:27:08.775609+00:00,prediction_generated,17,risk_score=0.1550; risk_tier=Low,John Doe
+2026-05-31T08:27:08.792583+00:00,prediction_generated,18,risk_score=0.2250; risk_tier=Low,John Doe
+2026-05-31T08:27:08.808551+00:00,prediction_generated,19,risk_score=0.1400; risk_tier=Low,John Doe
+2026-05-31T08:27:08.824276+00:00,prediction_generated,20,risk_score=0.5550; risk_tier=Medium,John Doe
+2026-05-31T08:27:08.843652+00:00,prediction_generated,21,risk_score=0.1800; risk_tier=Low,John Doe
+2026-05-31T08:27:08.861869+00:00,prediction_generated,22,risk_score=0.1650; risk_tier=Low,John Doe
+2026-05-31T08:27:08.878348+00:00,prediction_generated,23,risk_score=0.1600; risk_tier=Low,John Doe
+2026-05-31T08:27:08.894525+00:00,prediction_generated,24,risk_score=0.2150; risk_tier=Low,John Doe
+2026-05-31T08:27:08.910410+00:00,prediction_generated,25,risk_score=0.2350; risk_tier=Low,John Doe
+2026-05-31T08:27:08.928167+00:00,prediction_generated,26,risk_score=0.2150; risk_tier=Low,John Doe
+2026-05-31T08:27:08.945010+00:00,prediction_generated,27,risk_score=0.1150; risk_tier=Low,John Doe
+2026-05-31T08:27:08.962771+00:00,prediction_generated,28,risk_score=0.2400; risk_tier=Low,John Doe
+2026-05-31T08:27:08.979489+00:00,prediction_generated,29,risk_score=0.1900; risk_tier=Low,John Doe
+2026-05-31T08:27:08.998880+00:00,prediction_generated,30,risk_score=0.2650; risk_tier=Low,John Doe
+2026-05-31T08:27:09.020764+00:00,prediction_generated,31,risk_score=0.2600; risk_tier=Low,John Doe
+2026-05-31T08:27:09.037168+00:00,prediction_generated,32,risk_score=0.0750; risk_tier=Low,John Doe
+2026-05-31T08:27:09.056539+00:00,prediction_generated,33,risk_score=0.2750; risk_tier=Low,John Doe
+2026-05-31T08:27:09.076913+00:00,prediction_generated,34,risk_score=0.0950; risk_tier=Low,John Doe
+2026-05-31T08:27:09.094996+00:00,prediction_generated,35,risk_score=0.1500; risk_tier=Low,John Doe
+2026-05-31T08:27:09.111699+00:00,prediction_generated,36,risk_score=0.6050; risk_tier=Medium,John Doe
+2026-05-31T08:27:09.129512+00:00,prediction_generated,37,risk_score=0.0850; risk_tier=Low,John Doe
+2026-05-31T08:27:09.150111+00:00,prediction_generated,38,risk_score=0.2700; risk_tier=Low,John Doe
+2026-05-31T08:27:09.170154+00:00,prediction_generated,39,risk_score=0.2450; risk_tier=Low,John Doe
+2026-05-31T08:27:09.189058+00:00,prediction_generated,40,risk_score=0.2750; risk_tier=Low,John Doe
+2026-05-31T08:27:09.205316+00:00,prediction_generated,41,risk_score=0.2750; risk_tier=Low,John Doe
+2026-05-31T08:27:09.224232+00:00,prediction_generated,42,risk_score=0.2300; risk_tier=Low,John Doe
+2026-05-31T08:27:09.242804+00:00,prediction_generated,43,risk_score=0.1000; risk_tier=Low,John Doe
+2026-05-31T08:27:09.261441+00:00,prediction_generated,44,risk_score=0.6200; risk_tier=Medium,John Doe
+2026-05-31T08:27:09.279024+00:00,prediction_generated,45,risk_score=0.1850; risk_tier=Low,John Doe
+2026-05-31T08:27:09.297714+00:00,prediction_generated,46,risk_score=0.1700; risk_tier=Low,John Doe
+2026-05-31T08:27:09.318146+00:00,prediction_generated,47,risk_score=0.5350; risk_tier=Medium,John Doe
+2026-05-31T08:27:09.340450+00:00,prediction_generated,48,risk_score=0.0850; risk_tier=Low,John Doe
+2026-05-31T08:27:09.356774+00:00,prediction_generated,49,risk_score=0.1150; risk_tier=Low,John Doe
+2026-05-31T08:27:09.375068+00:00,prediction_generated,50,risk_score=0.2450; risk_tier=Low,John Doe
+2026-05-31T08:27:09.392893+00:00,prediction_generated,51,risk_score=0.2000; risk_tier=Low,John Doe
+2026-05-31T08:27:09.411210+00:00,prediction_generated,52,risk_score=0.1100; risk_tier=Low,John Doe
+2026-05-31T08:27:09.431211+00:00,prediction_generated,53,risk_score=0.2350; risk_tier=Low,John Doe
+2026-05-31T08:27:09.452293+00:00,prediction_generated,54,risk_score=0.2600; risk_tier=Low,John Doe
+2026-05-31T08:27:09.472636+00:00,prediction_generated,55,risk_score=0.3200; risk_tier=Low,John Doe
+2026-05-31T08:27:09.490226+00:00,prediction_generated,56,risk_score=0.0750; risk_tier=Low,John Doe
+2026-05-31T08:27:09.506899+00:00,prediction_generated,57,risk_score=0.1650; risk_tier=Low,John Doe
+2026-05-31T08:27:09.526526+00:00,prediction_generated,58,risk_score=0.1350; risk_tier=Low,John Doe
+2026-05-31T08:27:09.544920+00:00,prediction_generated,59,risk_score=0.2600; risk_tier=Low,John Doe
+2026-05-31T08:27:09.562704+00:00,prediction_generated,60,risk_score=0.1500; risk_tier=Low,John Doe
+2026-05-31T08:27:09.581220+00:00,prediction_generated,61,risk_score=0.1600; risk_tier=Low,John Doe
+2026-05-31T08:27:09.598624+00:00,prediction_generated,62,risk_score=0.2500; risk_tier=Low,John Doe
+2026-05-31T08:27:09.616558+00:00,prediction_generated,63,risk_score=0.2900; risk_tier=Low,John Doe
+2026-05-31T08:27:09.633627+00:00,prediction_generated,64,risk_score=0.0750; risk_tier=Low,John Doe
+2026-05-31T08:27:09.655843+00:00,prediction_generated,65,risk_score=0.1550; risk_tier=Low,John Doe
+2026-05-31T08:27:09.674294+00:00,prediction_generated,66,risk_score=0.1300; risk_tier=Low,John Doe
+2026-05-31T08:27:09.693698+00:00,prediction_generated,67,risk_score=0.1400; risk_tier=Low,John Doe
+2026-05-31T08:27:09.709917+00:00,prediction_generated,68,risk_score=0.2850; risk_tier=Low,John Doe
+2026-05-31T08:27:09.727109+00:00,prediction_generated,69,risk_score=0.2100; risk_tier=Low,John Doe
+2026-05-31T08:27:09.745681+00:00,prediction_generated,70,risk_score=0.1150; risk_tier=Low,John Doe
+2026-05-31T08:27:09.764492+00:00,prediction_generated,71,risk_score=0.2700; risk_tier=Low,John Doe
+2026-05-31T08:27:09.783871+00:00,prediction_generated,72,risk_score=0.2300; risk_tier=Low,John Doe
+2026-05-31T08:27:09.802306+00:00,prediction_generated,73,risk_score=0.2550; risk_tier=Low,John Doe
+2026-05-31T08:27:09.818856+00:00,prediction_generated,74,risk_score=0.0950; risk_tier=Low,John Doe
+2026-05-31T08:27:09.836794+00:00,prediction_generated,75,risk_score=0.2300; risk_tier=Low,John Doe
+2026-05-31T08:27:09.856669+00:00,prediction_generated,76,risk_score=0.1550; risk_tier=Low,John Doe
+2026-05-31T08:27:09.875868+00:00,prediction_generated,77,risk_score=0.2500; risk_tier=Low,John Doe
+2026-05-31T08:27:09.892560+00:00,prediction_generated,78,risk_score=0.2450; risk_tier=Low,John Doe
+2026-05-31T08:27:09.910285+00:00,prediction_generated,79,risk_score=0.2400; risk_tier=Low,John Doe
+2026-05-31T08:27:09.927565+00:00,prediction_generated,80,risk_score=0.2600; risk_tier=Low,John Doe
+2026-05-31T08:27:09.945841+00:00,prediction_generated,81,risk_score=0.1500; risk_tier=Low,John Doe
+2026-05-31T08:27:09.962407+00:00,prediction_generated,82,risk_score=0.1750; risk_tier=Low,John Doe
+2026-05-31T08:27:09.979772+00:00,prediction_generated,83,risk_score=0.2150; risk_tier=Low,John Doe
+2026-05-31T08:27:09.997235+00:00,prediction_generated,84,risk_score=0.0850; risk_tier=Low,John Doe
+2026-05-31T08:27:10.014826+00:00,prediction_generated,85,risk_score=0.3050; risk_tier=Low,John Doe
+2026-05-31T08:27:10.034856+00:00,prediction_generated,86,risk_score=0.1900; risk_tier=Low,John Doe
+2026-05-31T08:27:10.051139+00:00,prediction_generated,87,risk_score=0.3150; risk_tier=Low,John Doe
+2026-05-31T08:27:10.068894+00:00,prediction_generated,88,risk_score=0.5200; risk_tier=Medium,John Doe
+2026-05-31T08:27:10.086168+00:00,prediction_generated,89,risk_score=0.0800; risk_tier=Low,John Doe
+2026-05-31T08:27:10.103396+00:00,prediction_generated,90,risk_score=0.2650; risk_tier=Low,John Doe
+2026-05-31T08:27:10.124263+00:00,prediction_generated,91,risk_score=0.2150; risk_tier=Low,John Doe
+2026-05-31T08:27:10.142560+00:00,prediction_generated,92,risk_score=0.3850; risk_tier=Low,John Doe
+2026-05-31T08:27:10.162196+00:00,prediction_generated,93,risk_score=0.2550; risk_tier=Low,John Doe
+2026-05-31T08:27:10.179042+00:00,prediction_generated,94,risk_score=0.1750; risk_tier=Low,John Doe
+2026-05-31T08:27:10.196896+00:00,prediction_generated,95,risk_score=0.1950; risk_tier=Low,John Doe
+2026-05-31T08:27:10.213639+00:00,prediction_generated,96,risk_score=0.2400; risk_tier=Low,John Doe
+2026-05-31T08:27:10.232335+00:00,prediction_generated,97,risk_score=0.3150; risk_tier=Low,John Doe
+2026-05-31T08:27:10.249478+00:00,prediction_generated,98,risk_score=0.2700; risk_tier=Low,John Doe
+2026-05-31T08:27:10.269119+00:00,prediction_generated,99,risk_score=0.2100; risk_tier=Low,John Doe
+2026-05-31T08:27:10.284528+00:00,prediction_generated,100,risk_score=0.1950; risk_tier=Low,John Doe
+2026-05-31T08:27:10.302069+00:00,prediction_generated,101,risk_score=0.2950; risk_tier=Low,John Doe
+2026-05-31T08:27:10.320097+00:00,prediction_generated,102,risk_score=0.1150; risk_tier=Low,John Doe
+2026-05-31T08:27:10.340552+00:00,prediction_generated,103,risk_score=0.1900; risk_tier=Low,John Doe
+2026-05-31T08:27:10.356647+00:00,prediction_generated,104,risk_score=0.2050; risk_tier=Low,John Doe
+2026-05-31T08:27:10.377559+00:00,prediction_generated,105,risk_score=0.3250; risk_tier=Low,John Doe
+2026-05-31T08:27:10.396688+00:00,prediction_generated,106,risk_score=0.2150; risk_tier=Low,John Doe
+2026-05-31T08:27:10.416653+00:00,prediction_generated,107,risk_score=0.5650; risk_tier=Medium,John Doe
+2026-05-31T08:27:10.435813+00:00,prediction_generated,108,risk_score=0.1600; risk_tier=Low,John Doe
+2026-05-31T08:27:10.453844+00:00,prediction_generated,109,risk_score=0.0850; risk_tier=Low,John Doe
+2026-05-31T08:27:10.470203+00:00,prediction_generated,110,risk_score=0.2750; risk_tier=Low,John Doe
+2026-05-31T08:27:10.489995+00:00,prediction_generated,111,risk_score=0.0950; risk_tier=Low,John Doe
+2026-05-31T08:27:10.511327+00:00,prediction_generated,112,risk_score=0.3000; risk_tier=Low,John Doe
+2026-05-31T08:27:10.531840+00:00,prediction_generated,113,risk_score=0.2000; risk_tier=Low,John Doe
+2026-05-31T08:27:10.547934+00:00,prediction_generated,114,risk_score=0.4550; risk_tier=Low,John Doe
+2026-05-31T08:27:10.569064+00:00,prediction_generated,115,risk_score=0.2950; risk_tier=Low,John Doe
+2026-05-31T08:27:10.589282+00:00,prediction_generated,116,risk_score=0.1850; risk_tier=Low,John Doe
+2026-05-31T08:27:10.603787+00:00,prediction_generated,117,risk_score=0.2650; risk_tier=Low,John Doe
+2026-05-31T08:27:10.621947+00:00,prediction_generated,118,risk_score=0.6250; risk_tier=Medium,John Doe
+2026-05-31T08:27:10.638257+00:00,prediction_generated,119,risk_score=0.1200; risk_tier=Low,John Doe
+2026-05-31T08:27:10.654362+00:00,prediction_generated,120,risk_score=0.5950; risk_tier=Medium,John Doe
+2026-05-31T08:27:10.672311+00:00,prediction_generated,121,risk_score=0.2650; risk_tier=Low,John Doe
+2026-05-31T08:27:10.690854+00:00,prediction_generated,122,risk_score=0.2500; risk_tier=Low,John Doe
+2026-05-31T08:27:10.707238+00:00,prediction_generated,123,risk_score=0.2650; risk_tier=Low,John Doe
+2026-05-31T08:27:10.723770+00:00,prediction_generated,124,risk_score=0.3400; risk_tier=Low,John Doe
+2026-05-31T08:27:10.742620+00:00,prediction_generated,125,risk_score=0.1500; risk_tier=Low,John Doe
+2026-05-31T08:27:10.760465+00:00,prediction_generated,126,risk_score=0.1300; risk_tier=Low,John Doe
+2026-05-31T08:27:10.776912+00:00,prediction_generated,127,risk_score=0.4350; risk_tier=Low,John Doe
+2026-05-31T08:27:10.794735+00:00,prediction_generated,128,risk_score=0.2600; risk_tier=Low,John Doe
+2026-05-31T08:27:10.813712+00:00,prediction_generated,129,risk_score=0.2500; risk_tier=Low,John Doe
+2026-05-31T08:27:10.831302+00:00,prediction_generated,130,risk_score=0.1200; risk_tier=Low,John Doe
+2026-05-31T08:27:10.849266+00:00,prediction_generated,131,risk_score=0.1800; risk_tier=Low,John Doe
+2026-05-31T08:27:10.865146+00:00,prediction_generated,132,risk_score=0.1150; risk_tier=Low,John Doe
+2026-05-31T08:27:10.882987+00:00,prediction_generated,133,risk_score=0.2300; risk_tier=Low,John Doe
+2026-05-31T08:27:10.899875+00:00,prediction_generated,134,risk_score=0.2150; risk_tier=Low,John Doe
+2026-05-31T08:27:10.914768+00:00,prediction_generated,135,risk_score=0.1350; risk_tier=Low,John Doe
+2026-05-31T08:27:10.933064+00:00,prediction_generated,136,risk_score=0.5750; risk_tier=Medium,John Doe
+2026-05-31T08:27:10.947681+00:00,prediction_generated,137,risk_score=0.2950; risk_tier=Low,John Doe
+2026-05-31T08:27:10.965545+00:00,prediction_generated,138,risk_score=0.2900; risk_tier=Low,John Doe
+2026-05-31T08:27:10.984896+00:00,prediction_generated,139,risk_score=0.2050; risk_tier=Low,John Doe
+2026-05-31T08:27:11.003951+00:00,prediction_generated,140,risk_score=0.1350; risk_tier=Low,John Doe
+2026-05-31T08:27:11.020079+00:00,prediction_generated,141,risk_score=0.2800; risk_tier=Low,John Doe
+2026-05-31T08:27:11.041286+00:00,prediction_generated,142,risk_score=0.2350; risk_tier=Low,John Doe
+2026-05-31T08:27:11.059347+00:00,prediction_generated,143,risk_score=0.1450; risk_tier=Low,John Doe
+2026-05-31T08:27:11.075262+00:00,prediction_generated,144,risk_score=0.1400; risk_tier=Low,John Doe
+2026-05-31T08:27:11.092878+00:00,prediction_generated,145,risk_score=0.1800; risk_tier=Low,John Doe
+2026-05-31T08:27:11.113316+00:00,prediction_generated,146,risk_score=0.1800; risk_tier=Low,John Doe
+2026-05-31T08:27:11.130981+00:00,prediction_generated,147,risk_score=0.2250; risk_tier=Low,John Doe
+2026-05-31T08:27:11.148727+00:00,prediction_generated,148,risk_score=0.2200; risk_tier=Low,John Doe
+2026-05-31T08:27:11.167050+00:00,prediction_generated,149,risk_score=0.1650; risk_tier=Low,John Doe
+2026-05-31T08:27:11.186176+00:00,prediction_generated,150,risk_score=0.1700; risk_tier=Low,John Doe
+2026-05-31T08:27:11.205441+00:00,prediction_generated,151,risk_score=0.2400; risk_tier=Low,John Doe
+2026-05-31T08:27:11.225377+00:00,prediction_generated,152,risk_score=0.0650; risk_tier=Low,John Doe
+2026-05-31T08:27:11.246902+00:00,prediction_generated,153,risk_score=0.6100; risk_tier=Medium,John Doe
+2026-05-31T08:27:11.265278+00:00,prediction_generated,154,risk_score=0.2300; risk_tier=Low,John Doe
+2026-05-31T08:27:11.283070+00:00,prediction_generated,155,risk_score=0.2500; risk_tier=Low,John Doe
+2026-05-31T08:27:11.302983+00:00,prediction_generated,156,risk_score=0.1800; risk_tier=Low,John Doe
+2026-05-31T08:27:11.325075+00:00,prediction_generated,157,risk_score=0.3950; risk_tier=Low,John Doe
+2026-05-31T08:27:11.343942+00:00,prediction_generated,158,risk_score=0.1350; risk_tier=Low,John Doe
+2026-05-31T08:27:11.364412+00:00,prediction_generated,159,risk_score=0.2650; risk_tier=Low,John Doe
+2026-05-31T08:27:11.383725+00:00,prediction_generated,160,risk_score=0.1450; risk_tier=Low,John Doe
+2026-05-31T08:27:11.403668+00:00,prediction_generated,161,risk_score=0.5400; risk_tier=Medium,John Doe
+2026-05-31T08:27:11.423004+00:00,prediction_generated,162,risk_score=0.2500; risk_tier=Low,John Doe
+2026-05-31T08:27:11.443471+00:00,prediction_generated,163,risk_score=0.1550; risk_tier=Low,John Doe
+2026-05-31T08:27:11.461881+00:00,prediction_generated,164,risk_score=0.1800; risk_tier=Low,John Doe
+2026-05-31T08:27:11.482934+00:00,prediction_generated,165,risk_score=0.2450; risk_tier=Low,John Doe
+2026-05-31T08:27:11.505201+00:00,prediction_generated,166,risk_score=0.2800; risk_tier=Low,John Doe
+2026-05-31T08:27:11.529298+00:00,prediction_generated,167,risk_score=0.2500; risk_tier=Low,John Doe
+2026-05-31T08:27:11.552128+00:00,prediction_generated,168,risk_score=0.2300; risk_tier=Low,John Doe
+2026-05-31T08:27:11.572395+00:00,prediction_generated,169,risk_score=0.1150; risk_tier=Low,John Doe
+2026-05-31T08:27:11.590489+00:00,prediction_generated,170,risk_score=0.1500; risk_tier=Low,John Doe
+2026-05-31T08:27:11.609351+00:00,prediction_generated,171,risk_score=0.5500; risk_tier=Medium,John Doe
+2026-05-31T08:27:11.630700+00:00,prediction_generated,172,risk_score=0.2300; risk_tier=Low,John Doe
+2026-05-31T08:27:11.650687+00:00,prediction_generated,173,risk_score=0.5600; risk_tier=Medium,John Doe
+2026-05-31T08:27:11.670008+00:00,prediction_generated,174,risk_score=0.1300; risk_tier=Low,John Doe
+2026-05-31T08:27:11.690223+00:00,prediction_generated,175,risk_score=0.3500; risk_tier=Low,John Doe
+2026-05-31T08:27:11.708514+00:00,prediction_generated,176,risk_score=0.1600; risk_tier=Low,John Doe
+2026-05-31T08:27:11.727729+00:00,prediction_generated,177,risk_score=0.1250; risk_tier=Low,John Doe
+2026-05-31T08:27:11.746864+00:00,prediction_generated,178,risk_score=0.2850; risk_tier=Low,John Doe
+2026-05-31T08:27:11.766383+00:00,prediction_generated,179,risk_score=0.1200; risk_tier=Low,John Doe
+2026-05-31T08:27:11.788502+00:00,prediction_generated,180,risk_score=0.2300; risk_tier=Low,John Doe
+2026-05-31T08:27:11.808727+00:00,prediction_generated,181,risk_score=0.1600; risk_tier=Low,John Doe
+2026-05-31T08:27:11.830826+00:00,prediction_generated,182,risk_score=0.2450; risk_tier=Low,John Doe
+2026-05-31T08:27:11.850321+00:00,prediction_generated,183,risk_score=0.2650; risk_tier=Low,John Doe
+2026-05-31T08:27:11.875477+00:00,prediction_generated,184,risk_score=0.2050; risk_tier=Low,John Doe
+2026-05-31T08:27:11.894923+00:00,prediction_generated,185,risk_score=0.2150; risk_tier=Low,John Doe
+2026-05-31T08:27:11.914744+00:00,prediction_generated,186,risk_score=0.5150; risk_tier=Medium,John Doe
+2026-05-31T08:27:11.935101+00:00,prediction_generated,187,risk_score=0.2300; risk_tier=Low,John Doe
+2026-05-31T08:27:11.956423+00:00,prediction_generated,188,risk_score=0.2900; risk_tier=Low,John Doe
+2026-05-31T08:27:11.974215+00:00,prediction_generated,189,risk_score=0.4800; risk_tier=Low,John Doe
+2026-05-31T08:27:11.991496+00:00,prediction_generated,190,risk_score=0.1750; risk_tier=Low,John Doe
+2026-05-31T08:27:12.012424+00:00,prediction_generated,191,risk_score=0.2350; risk_tier=Low,John Doe
+2026-05-31T08:27:12.034645+00:00,prediction_generated,192,risk_score=0.2150; risk_tier=Low,John Doe
+2026-05-31T08:27:12.056599+00:00,prediction_generated,193,risk_score=0.0800; risk_tier=Low,John Doe
+2026-05-31T08:27:12.074969+00:00,prediction_generated,194,risk_score=0.1750; risk_tier=Low,John Doe
+2026-05-31T08:27:12.095395+00:00,prediction_generated,195,risk_score=0.1500; risk_tier=Low,John Doe
+2026-05-31T08:27:12.112989+00:00,prediction_generated,196,risk_score=0.1400; risk_tier=Low,John Doe
+2026-05-31T08:27:12.131291+00:00,prediction_generated,197,risk_score=0.2950; risk_tier=Low,John Doe
+2026-05-31T08:27:12.147859+00:00,prediction_generated,198,risk_score=0.2450; risk_tier=Low,John Doe
+2026-05-31T08:27:12.167117+00:00,prediction_generated,199,risk_score=0.2600; risk_tier=Low,John Doe
+2026-05-31T08:27:12.185860+00:00,prediction_generated,200,risk_score=0.3750; risk_tier=Low,John Doe
+2026-05-31T08:27:12.201698+00:00,prediction_generated,201,risk_score=0.1600; risk_tier=Low,John Doe
+2026-05-31T08:27:12.219230+00:00,prediction_generated,202,risk_score=0.1700; risk_tier=Low,John Doe
+2026-05-31T08:27:12.237625+00:00,prediction_generated,203,risk_score=0.2700; risk_tier=Low,John Doe
+2026-05-31T08:27:12.258678+00:00,prediction_generated,204,risk_score=0.0750; risk_tier=Low,John Doe
+2026-05-31T08:27:12.275325+00:00,prediction_generated,205,risk_score=0.1850; risk_tier=Low,John Doe
+2026-05-31T08:27:12.293720+00:00,prediction_generated,206,risk_score=0.2050; risk_tier=Low,John Doe
+2026-05-31T08:27:12.310131+00:00,prediction_generated,207,risk_score=0.4250; risk_tier=Low,John Doe
+2026-05-31T08:27:12.328524+00:00,prediction_generated,208,risk_score=0.2250; risk_tier=Low,John Doe
+2026-05-31T08:27:12.344908+00:00,prediction_generated,209,risk_score=0.2500; risk_tier=Low,John Doe
+2026-05-31T08:27:12.361640+00:00,prediction_generated,210,risk_score=0.1700; risk_tier=Low,John Doe
+2026-05-31T08:27:12.382309+00:00,prediction_generated,211,risk_score=0.1700; risk_tier=Low,John Doe
+2026-05-31T08:27:12.402909+00:00,prediction_generated,212,risk_score=0.1800; risk_tier=Low,John Doe
+2026-05-31T08:27:12.425123+00:00,prediction_generated,213,risk_score=0.2500; risk_tier=Low,John Doe
+2026-05-31T08:27:12.445685+00:00,prediction_generated,214,risk_score=0.1800; risk_tier=Low,John Doe
+2026-05-31T08:27:12.463353+00:00,prediction_generated,215,risk_score=0.1250; risk_tier=Low,John Doe
+2026-05-31T08:27:12.480812+00:00,prediction_generated,216,risk_score=0.2900; risk_tier=Low,John Doe
+2026-05-31T08:27:12.500249+00:00,prediction_generated,217,risk_score=0.3000; risk_tier=Low,John Doe
+2026-05-31T08:27:12.521640+00:00,prediction_generated,218,risk_score=0.0800; risk_tier=Low,John Doe
+2026-05-31T08:27:12.542513+00:00,prediction_generated,219,risk_score=0.1550; risk_tier=Low,John Doe
+2026-05-31T08:27:12.561800+00:00,prediction_generated,220,risk_score=0.3150; risk_tier=Low,John Doe
+2026-05-31T08:27:12.583681+00:00,prediction_generated,221,risk_score=0.2500; risk_tier=Low,John Doe
+2026-05-31T08:27:12.605031+00:00,prediction_generated,222,risk_score=0.2000; risk_tier=Low,John Doe
+2026-05-31T08:27:12.626761+00:00,prediction_generated,223,risk_score=0.2050; risk_tier=Low,John Doe
+2026-05-31T08:27:12.645305+00:00,prediction_generated,224,risk_score=0.2000; risk_tier=Low,John Doe
+2026-05-31T08:27:12.664814+00:00,prediction_generated,225,risk_score=0.2400; risk_tier=Low,John Doe
+2026-05-31T08:27:12.683872+00:00,prediction_generated,226,risk_score=0.1150; risk_tier=Low,John Doe
+2026-05-31T08:27:12.703196+00:00,prediction_generated,227,risk_score=0.2600; risk_tier=Low,John Doe
+2026-05-31T08:27:12.721881+00:00,prediction_generated,228,risk_score=0.4900; risk_tier=Low,John Doe
+2026-05-31T08:27:12.742538+00:00,prediction_generated,229,risk_score=0.5250; risk_tier=Medium,John Doe
+2026-05-31T08:27:12.759728+00:00,prediction_generated,230,risk_score=0.1650; risk_tier=Low,John Doe
+2026-05-31T08:27:12.777632+00:00,prediction_generated,231,risk_score=0.2950; risk_tier=Low,John Doe
+2026-05-31T08:27:12.795648+00:00,prediction_generated,232,risk_score=0.5800; risk_tier=Medium,John Doe
+2026-05-31T08:27:12.815535+00:00,prediction_generated,233,risk_score=0.6200; risk_tier=Medium,John Doe
+2026-05-31T08:27:12.833873+00:00,prediction_generated,234,risk_score=0.2700; risk_tier=Low,John Doe
+2026-05-31T08:27:12.854509+00:00,prediction_generated,235,risk_score=0.1700; risk_tier=Low,John Doe
+2026-05-31T08:27:12.873276+00:00,prediction_generated,236,risk_score=0.5200; risk_tier=Medium,John Doe
+2026-05-31T08:27:12.893812+00:00,prediction_generated,237,risk_score=0.2450; risk_tier=Low,John Doe
+2026-05-31T08:27:12.911185+00:00,prediction_generated,238,risk_score=0.3100; risk_tier=Low,John Doe
+2026-05-31T08:27:12.929920+00:00,prediction_generated,239,risk_score=0.5750; risk_tier=Medium,John Doe
+2026-05-31T08:27:12.947779+00:00,prediction_generated,240,risk_score=0.1150; risk_tier=Low,John Doe
+2026-05-31T08:27:12.965549+00:00,prediction_generated,241,risk_score=0.1600; risk_tier=Low,John Doe
+2026-05-31T08:27:12.984671+00:00,prediction_generated,242,risk_score=0.1900; risk_tier=Low,John Doe
+2026-05-31T08:27:13.003685+00:00,prediction_generated,243,risk_score=0.1100; risk_tier=Low,John Doe
+2026-05-31T08:27:13.021890+00:00,prediction_generated,244,risk_score=0.1000; risk_tier=Low,John Doe
+2026-05-31T08:27:13.042516+00:00,prediction_generated,245,risk_score=0.2000; risk_tier=Low,John Doe
+2026-05-31T08:27:13.062436+00:00,prediction_generated,246,risk_score=0.2050; risk_tier=Low,John Doe
+2026-05-31T08:27:13.081589+00:00,prediction_generated,247,risk_score=0.1400; risk_tier=Low,John Doe
+2026-05-31T08:27:13.102172+00:00,prediction_generated,248,risk_score=0.3750; risk_tier=Low,John Doe
+2026-05-31T08:27:13.122170+00:00,prediction_generated,249,risk_score=0.3300; risk_tier=Low,John Doe
+2026-05-31T08:27:13.141212+00:00,prediction_generated,250,risk_score=0.1550; risk_tier=Low,John Doe
+2026-05-31T08:27:13.161209+00:00,prediction_generated,251,risk_score=0.0800; risk_tier=Low,John Doe
+2026-05-31T08:27:13.180129+00:00,prediction_generated,252,risk_score=0.2250; risk_tier=Low,John Doe
+2026-05-31T08:27:13.200474+00:00,prediction_generated,253,risk_score=0.1600; risk_tier=Low,John Doe
+2026-05-31T08:27:13.219847+00:00,prediction_generated,254,risk_score=0.2900; risk_tier=Low,John Doe
+2026-05-31T08:27:13.241399+00:00,prediction_generated,255,risk_score=0.5350; risk_tier=Medium,John Doe
+2026-05-31T08:27:13.259580+00:00,prediction_generated,256,risk_score=0.1300; risk_tier=Low,John Doe
+2026-05-31T08:27:13.280794+00:00,prediction_generated,257,risk_score=0.1450; risk_tier=Low,John Doe
+2026-05-31T08:27:13.301465+00:00,prediction_generated,258,risk_score=0.2200; risk_tier=Low,John Doe
+2026-05-31T08:27:13.322214+00:00,prediction_generated,259,risk_score=0.1600; risk_tier=Low,John Doe
+2026-05-31T08:27:13.344665+00:00,prediction_generated,260,risk_score=0.2000; risk_tier=Low,John Doe
+2026-05-31T08:27:13.363742+00:00,prediction_generated,261,risk_score=0.2200; risk_tier=Low,John Doe
+2026-05-31T08:27:13.382984+00:00,prediction_generated,262,risk_score=0.1900; risk_tier=Low,John Doe
+2026-05-31T08:27:13.402447+00:00,prediction_generated,263,risk_score=0.1450; risk_tier=Low,John Doe
+2026-05-31T08:27:13.424280+00:00,prediction_generated,264,risk_score=0.1500; risk_tier=Low,John Doe
+2026-05-31T08:27:13.441399+00:00,prediction_generated,265,risk_score=0.1850; risk_tier=Low,John Doe
+2026-05-31T08:27:13.459504+00:00,prediction_generated,266,risk_score=0.3150; risk_tier=Low,John Doe
+2026-05-31T08:27:13.477289+00:00,prediction_generated,267,risk_score=0.1150; risk_tier=Low,John Doe
+2026-05-31T08:27:13.496497+00:00,prediction_generated,268,risk_score=0.2250; risk_tier=Low,John Doe
+2026-05-31T08:27:13.517032+00:00,prediction_generated,269,risk_score=0.2250; risk_tier=Low,John Doe
+2026-05-31T08:27:13.537623+00:00,prediction_generated,270,risk_score=0.1100; risk_tier=Low,John Doe
+2026-05-31T08:27:13.571795+00:00,prediction_generated,271,risk_score=0.2650; risk_tier=Low,John Doe
+2026-05-31T08:27:13.609439+00:00,prediction_generated,272,risk_score=0.2150; risk_tier=Low,John Doe
+2026-05-31T08:27:13.648965+00:00,prediction_generated,273,risk_score=0.2350; risk_tier=Low,John Doe
+2026-05-31T08:27:13.689115+00:00,prediction_generated,274,risk_score=0.2550; risk_tier=Low,John Doe
+2026-05-31T08:27:13.747379+00:00,prediction_generated,275,risk_score=0.3550; risk_tier=Low,John Doe
+2026-05-31T08:27:13.844837+00:00,prediction_generated,276,risk_score=0.1600; risk_tier=Low,John Doe
+2026-05-31T08:27:13.869758+00:00,prediction_generated,277,risk_score=0.2250; risk_tier=Low,John Doe
+2026-05-31T08:27:13.895375+00:00,prediction_generated,278,risk_score=0.1500; risk_tier=Low,John Doe
+2026-05-31T08:27:13.919472+00:00,prediction_generated,279,risk_score=0.5700; risk_tier=Medium,John Doe
+2026-05-31T08:27:13.942692+00:00,prediction_generated,280,risk_score=0.2800; risk_tier=Low,John Doe
+2026-05-31T08:27:13.964731+00:00,prediction_generated,281,risk_score=0.2050; risk_tier=Low,John Doe
+2026-05-31T08:27:13.988888+00:00,prediction_generated,282,risk_score=0.1250; risk_tier=Low,John Doe
+2026-05-31T08:27:14.013316+00:00,prediction_generated,283,risk_score=0.1650; risk_tier=Low,John Doe
+2026-05-31T08:27:14.036674+00:00,prediction_generated,284,risk_score=0.1100; risk_tier=Low,John Doe
+2026-05-31T08:27:14.058916+00:00,prediction_generated,285,risk_score=0.1500; risk_tier=Low,John Doe
+2026-05-31T08:27:14.085109+00:00,prediction_generated,286,risk_score=0.1700; risk_tier=Low,John Doe
+2026-05-31T08:27:14.106913+00:00,prediction_generated,287,risk_score=0.2550; risk_tier=Low,John Doe
+2026-05-31T08:27:14.129336+00:00,prediction_generated,288,risk_score=0.1850; risk_tier=Low,John Doe
+2026-05-31T08:27:14.151832+00:00,prediction_generated,289,risk_score=0.2550; risk_tier=Low,John Doe
+2026-05-31T08:27:14.178456+00:00,prediction_generated,290,risk_score=0.2750; risk_tier=Low,John Doe
+2026-05-31T08:27:14.201364+00:00,prediction_generated,291,risk_score=0.1300; risk_tier=Low,John Doe
+2026-05-31T08:27:14.223319+00:00,prediction_generated,292,risk_score=0.2550; risk_tier=Low,John Doe
+2026-05-31T08:27:14.251946+00:00,prediction_generated,293,risk_score=0.2400; risk_tier=Low,John Doe
+2026-05-31T08:27:14.276524+00:00,prediction_generated,294,risk_score=0.1400; risk_tier=Low,John Doe
+2026-05-31T08:27:14.297165+00:00,prediction_generated,295,risk_score=0.2950; risk_tier=Low,John Doe
+2026-05-31T08:27:14.323199+00:00,prediction_generated,296,risk_score=0.2400; risk_tier=Low,John Doe
+2026-05-31T08:27:14.346149+00:00,prediction_generated,297,risk_score=0.2000; risk_tier=Low,John Doe
+2026-05-31T08:27:14.367435+00:00,prediction_generated,298,risk_score=0.2400; risk_tier=Low,John Doe
+2026-05-31T08:27:14.392708+00:00,prediction_generated,299,risk_score=0.1150; risk_tier=Low,John Doe
+2026-05-31T08:29:45.672995+00:00,alert_dismissed,118,rf_prediction=0; reason=False positive,Analyst
+2026-05-31T08:29:48.251722+00:00,alert_dismissed,44,rf_prediction=0; reason=False positive,Analyst
+2026-05-31T08:29:48.830905+00:00,alert_dismissed,233,rf_prediction=0; reason=False positive,Analyst
+2026-05-31T08:29:49.281515+00:00,alert_dismissed,233,rf_prediction=0; reason=False positive,Analyst
+2026-05-31T08:29:53.723964+00:00,alert_dismissed,153,rf_prediction=0; reason=False positive,Analyst
+2026-05-31T08:29:55.720325+00:00,alert_dismissed,36,rf_prediction=0; reason=False positive,Analyst
+2026-05-31T08:29:56.988528+00:00,alert_dismissed,120,rf_prediction=0; reason=False positive,Analyst
+2026-05-31T08:30:01.637039+00:00,alert_escalated,232,case_id=CDD-05348367; risk_tier=Medium,Analyst
+2026-05-31T08:30:13.906637+00:00,case_escalated_to_str,232,case_id=CDD-05348367; cdd_level=Standard,John Doe
+2026-05-31T14:15:26.534794+00:00,dataset_uploaded,,filename=aml_demo_data.csv; row_count=300; flagged=22,Analyst
+2026-05-31T14:15:26.550212+00:00,prediction_generated,0,risk_score=0.1300; risk_tier=Low,Analyst
+2026-05-31T14:15:26.567129+00:00,prediction_generated,1,risk_score=0.1200; risk_tier=Low,Analyst
+2026-05-31T14:15:26.583909+00:00,prediction_generated,2,risk_score=0.5400; risk_tier=Medium,Analyst
+2026-05-31T14:15:26.605315+00:00,prediction_generated,3,risk_score=0.3750; risk_tier=Low,Analyst
+2026-05-31T14:15:26.649633+00:00,prediction_generated,4,risk_score=0.2450; risk_tier=Low,Analyst
+2026-05-31T14:15:26.687403+00:00,prediction_generated,5,risk_score=0.1750; risk_tier=Low,Analyst
+2026-05-31T14:15:26.736061+00:00,prediction_generated,6,risk_score=0.1350; risk_tier=Low,Analyst
+2026-05-31T14:15:26.835802+00:00,prediction_generated,7,risk_score=0.1800; risk_tier=Low,Analyst
+2026-05-31T14:15:26.857618+00:00,prediction_generated,8,risk_score=0.1650; risk_tier=Low,Analyst
+2026-05-31T14:15:26.877067+00:00,prediction_generated,9,risk_score=0.2550; risk_tier=Low,Analyst
+2026-05-31T14:15:26.896040+00:00,prediction_generated,10,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:15:26.914461+00:00,prediction_generated,11,risk_score=0.1250; risk_tier=Low,Analyst
+2026-05-31T14:15:26.933871+00:00,prediction_generated,12,risk_score=0.1300; risk_tier=Low,Analyst
+2026-05-31T14:15:26.953319+00:00,prediction_generated,13,risk_score=0.1450; risk_tier=Low,Analyst
+2026-05-31T14:15:26.973331+00:00,prediction_generated,14,risk_score=0.4000; risk_tier=Low,Analyst
+2026-05-31T14:15:26.992779+00:00,prediction_generated,15,risk_score=0.2750; risk_tier=Low,Analyst
+2026-05-31T14:15:27.010287+00:00,prediction_generated,16,risk_score=0.2450; risk_tier=Low,Analyst
+2026-05-31T14:15:27.029908+00:00,prediction_generated,17,risk_score=0.1550; risk_tier=Low,Analyst
+2026-05-31T14:15:27.047365+00:00,prediction_generated,18,risk_score=0.2250; risk_tier=Low,Analyst
+2026-05-31T14:15:27.064437+00:00,prediction_generated,19,risk_score=0.1400; risk_tier=Low,Analyst
+2026-05-31T14:15:27.082824+00:00,prediction_generated,20,risk_score=0.5550; risk_tier=Medium,Analyst
+2026-05-31T14:15:27.100339+00:00,prediction_generated,21,risk_score=0.1800; risk_tier=Low,Analyst
+2026-05-31T14:15:27.118084+00:00,prediction_generated,22,risk_score=0.1650; risk_tier=Low,Analyst
+2026-05-31T14:15:27.136881+00:00,prediction_generated,23,risk_score=0.1600; risk_tier=Low,Analyst
+2026-05-31T14:15:27.157237+00:00,prediction_generated,24,risk_score=0.2150; risk_tier=Low,Analyst
+2026-05-31T14:15:27.179172+00:00,prediction_generated,25,risk_score=0.2350; risk_tier=Low,Analyst
+2026-05-31T14:15:27.202165+00:00,prediction_generated,26,risk_score=0.2150; risk_tier=Low,Analyst
+2026-05-31T14:15:27.221791+00:00,prediction_generated,27,risk_score=0.1150; risk_tier=Low,Analyst
+2026-05-31T14:15:27.240259+00:00,prediction_generated,28,risk_score=0.2400; risk_tier=Low,Analyst
+2026-05-31T14:15:27.261433+00:00,prediction_generated,29,risk_score=0.1900; risk_tier=Low,Analyst
+2026-05-31T14:15:27.281200+00:00,prediction_generated,30,risk_score=0.2650; risk_tier=Low,Analyst
+2026-05-31T14:15:27.300156+00:00,prediction_generated,31,risk_score=0.2600; risk_tier=Low,Analyst
+2026-05-31T14:15:27.319031+00:00,prediction_generated,32,risk_score=0.0750; risk_tier=Low,Analyst
+2026-05-31T14:15:27.340097+00:00,prediction_generated,33,risk_score=0.2750; risk_tier=Low,Analyst
+2026-05-31T14:15:27.359327+00:00,prediction_generated,34,risk_score=0.0950; risk_tier=Low,Analyst
+2026-05-31T14:15:27.380072+00:00,prediction_generated,35,risk_score=0.1500; risk_tier=Low,Analyst
+2026-05-31T14:15:27.399911+00:00,prediction_generated,36,risk_score=0.6050; risk_tier=Medium,Analyst
+2026-05-31T14:15:27.418862+00:00,prediction_generated,37,risk_score=0.0850; risk_tier=Low,Analyst
+2026-05-31T14:15:27.440462+00:00,prediction_generated,38,risk_score=0.2700; risk_tier=Low,Analyst
+2026-05-31T14:15:27.461959+00:00,prediction_generated,39,risk_score=0.2450; risk_tier=Low,Analyst
+2026-05-31T14:15:27.482847+00:00,prediction_generated,40,risk_score=0.2750; risk_tier=Low,Analyst
+2026-05-31T14:15:27.506043+00:00,prediction_generated,41,risk_score=0.2750; risk_tier=Low,Analyst
+2026-05-31T14:15:27.527360+00:00,prediction_generated,42,risk_score=0.2300; risk_tier=Low,Analyst
+2026-05-31T14:15:27.547432+00:00,prediction_generated,43,risk_score=0.1000; risk_tier=Low,Analyst
+2026-05-31T14:15:27.569446+00:00,prediction_generated,44,risk_score=0.6200; risk_tier=Medium,Analyst
+2026-05-31T14:15:27.590911+00:00,prediction_generated,45,risk_score=0.1850; risk_tier=Low,Analyst
+2026-05-31T14:15:27.614150+00:00,prediction_generated,46,risk_score=0.1700; risk_tier=Low,Analyst
+2026-05-31T14:15:27.634697+00:00,prediction_generated,47,risk_score=0.5350; risk_tier=Medium,Analyst
+2026-05-31T14:15:27.657145+00:00,prediction_generated,48,risk_score=0.0850; risk_tier=Low,Analyst
+2026-05-31T14:15:27.681278+00:00,prediction_generated,49,risk_score=0.1150; risk_tier=Low,Analyst
+2026-05-31T14:15:27.703407+00:00,prediction_generated,50,risk_score=0.2450; risk_tier=Low,Analyst
+2026-05-31T14:15:27.725783+00:00,prediction_generated,51,risk_score=0.2000; risk_tier=Low,Analyst
+2026-05-31T14:15:27.744673+00:00,prediction_generated,52,risk_score=0.1100; risk_tier=Low,Analyst
+2026-05-31T14:15:27.767830+00:00,prediction_generated,53,risk_score=0.2350; risk_tier=Low,Analyst
+2026-05-31T14:15:27.786626+00:00,prediction_generated,54,risk_score=0.2600; risk_tier=Low,Analyst
+2026-05-31T14:15:27.807457+00:00,prediction_generated,55,risk_score=0.3200; risk_tier=Low,Analyst
+2026-05-31T14:15:27.827755+00:00,prediction_generated,56,risk_score=0.0750; risk_tier=Low,Analyst
+2026-05-31T14:15:27.850366+00:00,prediction_generated,57,risk_score=0.1650; risk_tier=Low,Analyst
+2026-05-31T14:15:27.871654+00:00,prediction_generated,58,risk_score=0.1350; risk_tier=Low,Analyst
+2026-05-31T14:15:27.893525+00:00,prediction_generated,59,risk_score=0.2600; risk_tier=Low,Analyst
+2026-05-31T14:15:27.913418+00:00,prediction_generated,60,risk_score=0.1500; risk_tier=Low,Analyst
+2026-05-31T14:15:27.935637+00:00,prediction_generated,61,risk_score=0.1600; risk_tier=Low,Analyst
+2026-05-31T14:15:27.958042+00:00,prediction_generated,62,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:15:27.985872+00:00,prediction_generated,63,risk_score=0.2900; risk_tier=Low,Analyst
+2026-05-31T14:15:28.017048+00:00,prediction_generated,64,risk_score=0.0750; risk_tier=Low,Analyst
+2026-05-31T14:15:28.041398+00:00,prediction_generated,65,risk_score=0.1550; risk_tier=Low,Analyst
+2026-05-31T14:15:28.064133+00:00,prediction_generated,66,risk_score=0.1300; risk_tier=Low,Analyst
+2026-05-31T14:15:28.082838+00:00,prediction_generated,67,risk_score=0.1400; risk_tier=Low,Analyst
+2026-05-31T14:15:28.101479+00:00,prediction_generated,68,risk_score=0.2850; risk_tier=Low,Analyst
+2026-05-31T14:15:28.120327+00:00,prediction_generated,69,risk_score=0.2100; risk_tier=Low,Analyst
+2026-05-31T14:15:28.139599+00:00,prediction_generated,70,risk_score=0.1150; risk_tier=Low,Analyst
+2026-05-31T14:15:28.156840+00:00,prediction_generated,71,risk_score=0.2700; risk_tier=Low,Analyst
+2026-05-31T14:15:28.177797+00:00,prediction_generated,72,risk_score=0.2300; risk_tier=Low,Analyst
+2026-05-31T14:15:28.198830+00:00,prediction_generated,73,risk_score=0.2550; risk_tier=Low,Analyst
+2026-05-31T14:15:28.218974+00:00,prediction_generated,74,risk_score=0.0950; risk_tier=Low,Analyst
+2026-05-31T14:15:28.235977+00:00,prediction_generated,75,risk_score=0.2300; risk_tier=Low,Analyst
+2026-05-31T14:15:28.255340+00:00,prediction_generated,76,risk_score=0.1550; risk_tier=Low,Analyst
+2026-05-31T14:15:28.276188+00:00,prediction_generated,77,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:15:28.294897+00:00,prediction_generated,78,risk_score=0.2450; risk_tier=Low,Analyst
+2026-05-31T14:15:28.316794+00:00,prediction_generated,79,risk_score=0.2400; risk_tier=Low,Analyst
+2026-05-31T14:15:28.336820+00:00,prediction_generated,80,risk_score=0.2600; risk_tier=Low,Analyst
+2026-05-31T14:15:28.355416+00:00,prediction_generated,81,risk_score=0.1500; risk_tier=Low,Analyst
+2026-05-31T14:15:28.374703+00:00,prediction_generated,82,risk_score=0.1750; risk_tier=Low,Analyst
+2026-05-31T14:15:28.394304+00:00,prediction_generated,83,risk_score=0.2150; risk_tier=Low,Analyst
+2026-05-31T14:15:28.415141+00:00,prediction_generated,84,risk_score=0.0850; risk_tier=Low,Analyst
+2026-05-31T14:15:28.436802+00:00,prediction_generated,85,risk_score=0.3050; risk_tier=Low,Analyst
+2026-05-31T14:15:28.456697+00:00,prediction_generated,86,risk_score=0.1900; risk_tier=Low,Analyst
+2026-05-31T14:15:28.475723+00:00,prediction_generated,87,risk_score=0.3150; risk_tier=Low,Analyst
+2026-05-31T14:15:28.496832+00:00,prediction_generated,88,risk_score=0.5200; risk_tier=Medium,Analyst
+2026-05-31T14:15:28.518900+00:00,prediction_generated,89,risk_score=0.0800; risk_tier=Low,Analyst
+2026-05-31T14:15:28.539228+00:00,prediction_generated,90,risk_score=0.2650; risk_tier=Low,Analyst
+2026-05-31T14:15:28.563696+00:00,prediction_generated,91,risk_score=0.2150; risk_tier=Low,Analyst
+2026-05-31T14:15:28.586447+00:00,prediction_generated,92,risk_score=0.3850; risk_tier=Low,Analyst
+2026-05-31T14:15:28.610293+00:00,prediction_generated,93,risk_score=0.2550; risk_tier=Low,Analyst
+2026-05-31T14:15:28.630158+00:00,prediction_generated,94,risk_score=0.1750; risk_tier=Low,Analyst
+2026-05-31T14:15:28.653826+00:00,prediction_generated,95,risk_score=0.1950; risk_tier=Low,Analyst
+2026-05-31T14:15:28.677230+00:00,prediction_generated,96,risk_score=0.2400; risk_tier=Low,Analyst
+2026-05-31T14:15:28.700919+00:00,prediction_generated,97,risk_score=0.3150; risk_tier=Low,Analyst
+2026-05-31T14:15:28.723848+00:00,prediction_generated,98,risk_score=0.2700; risk_tier=Low,Analyst
+2026-05-31T14:15:28.748029+00:00,prediction_generated,99,risk_score=0.2100; risk_tier=Low,Analyst
+2026-05-31T14:15:28.766873+00:00,prediction_generated,100,risk_score=0.1950; risk_tier=Low,Analyst
+2026-05-31T14:15:28.785350+00:00,prediction_generated,101,risk_score=0.2950; risk_tier=Low,Analyst
+2026-05-31T14:15:28.806691+00:00,prediction_generated,102,risk_score=0.1150; risk_tier=Low,Analyst
+2026-05-31T14:15:28.827655+00:00,prediction_generated,103,risk_score=0.1900; risk_tier=Low,Analyst
+2026-05-31T14:15:28.846693+00:00,prediction_generated,104,risk_score=0.2050; risk_tier=Low,Analyst
+2026-05-31T14:15:28.868062+00:00,prediction_generated,105,risk_score=0.3250; risk_tier=Low,Analyst
+2026-05-31T14:15:28.894966+00:00,prediction_generated,106,risk_score=0.2150; risk_tier=Low,Analyst
+2026-05-31T14:15:28.918100+00:00,prediction_generated,107,risk_score=0.5650; risk_tier=Medium,Analyst
+2026-05-31T14:15:28.937597+00:00,prediction_generated,108,risk_score=0.1600; risk_tier=Low,Analyst
+2026-05-31T14:15:28.958416+00:00,prediction_generated,109,risk_score=0.0850; risk_tier=Low,Analyst
+2026-05-31T14:15:28.979949+00:00,prediction_generated,110,risk_score=0.2750; risk_tier=Low,Analyst
+2026-05-31T14:15:28.999454+00:00,prediction_generated,111,risk_score=0.0950; risk_tier=Low,Analyst
+2026-05-31T14:15:29.019592+00:00,prediction_generated,112,risk_score=0.3000; risk_tier=Low,Analyst
+2026-05-31T14:15:29.036686+00:00,prediction_generated,113,risk_score=0.2000; risk_tier=Low,Analyst
+2026-05-31T14:15:29.055232+00:00,prediction_generated,114,risk_score=0.4550; risk_tier=Low,Analyst
+2026-05-31T14:15:29.070285+00:00,prediction_generated,115,risk_score=0.2950; risk_tier=Low,Analyst
+2026-05-31T14:15:29.088327+00:00,prediction_generated,116,risk_score=0.1850; risk_tier=Low,Analyst
+2026-05-31T14:15:29.106875+00:00,prediction_generated,117,risk_score=0.2650; risk_tier=Low,Analyst
+2026-05-31T14:15:29.125582+00:00,prediction_generated,118,risk_score=0.6250; risk_tier=Medium,Analyst
+2026-05-31T14:15:29.144042+00:00,prediction_generated,119,risk_score=0.1200; risk_tier=Low,Analyst
+2026-05-31T14:15:29.164406+00:00,prediction_generated,120,risk_score=0.5950; risk_tier=Medium,Analyst
+2026-05-31T14:15:29.183977+00:00,prediction_generated,121,risk_score=0.2650; risk_tier=Low,Analyst
+2026-05-31T14:15:29.207714+00:00,prediction_generated,122,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:15:29.226454+00:00,prediction_generated,123,risk_score=0.2650; risk_tier=Low,Analyst
+2026-05-31T14:15:29.245719+00:00,prediction_generated,124,risk_score=0.3400; risk_tier=Low,Analyst
+2026-05-31T14:15:29.266611+00:00,prediction_generated,125,risk_score=0.1500; risk_tier=Low,Analyst
+2026-05-31T14:15:29.290634+00:00,prediction_generated,126,risk_score=0.1300; risk_tier=Low,Analyst
+2026-05-31T14:15:29.311628+00:00,prediction_generated,127,risk_score=0.4350; risk_tier=Low,Analyst
+2026-05-31T14:15:29.329901+00:00,prediction_generated,128,risk_score=0.2600; risk_tier=Low,Analyst
+2026-05-31T14:15:29.350313+00:00,prediction_generated,129,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:15:29.369052+00:00,prediction_generated,130,risk_score=0.1200; risk_tier=Low,Analyst
+2026-05-31T14:15:29.388482+00:00,prediction_generated,131,risk_score=0.1800; risk_tier=Low,Analyst
+2026-05-31T14:15:29.407534+00:00,prediction_generated,132,risk_score=0.1150; risk_tier=Low,Analyst
+2026-05-31T14:15:29.429094+00:00,prediction_generated,133,risk_score=0.2300; risk_tier=Low,Analyst
+2026-05-31T14:15:29.447536+00:00,prediction_generated,134,risk_score=0.2150; risk_tier=Low,Analyst
+2026-05-31T14:15:29.470245+00:00,prediction_generated,135,risk_score=0.1350; risk_tier=Low,Analyst
+2026-05-31T14:15:29.489439+00:00,prediction_generated,136,risk_score=0.5750; risk_tier=Medium,Analyst
+2026-05-31T14:15:29.510142+00:00,prediction_generated,137,risk_score=0.2950; risk_tier=Low,Analyst
+2026-05-31T14:15:29.532559+00:00,prediction_generated,138,risk_score=0.2900; risk_tier=Low,Analyst
+2026-05-31T14:15:29.552784+00:00,prediction_generated,139,risk_score=0.2050; risk_tier=Low,Analyst
+2026-05-31T14:15:29.571980+00:00,prediction_generated,140,risk_score=0.1350; risk_tier=Low,Analyst
+2026-05-31T14:15:29.591690+00:00,prediction_generated,141,risk_score=0.2800; risk_tier=Low,Analyst
+2026-05-31T14:15:29.610534+00:00,prediction_generated,142,risk_score=0.2350; risk_tier=Low,Analyst
+2026-05-31T14:15:29.633768+00:00,prediction_generated,143,risk_score=0.1450; risk_tier=Low,Analyst
+2026-05-31T14:15:29.655231+00:00,prediction_generated,144,risk_score=0.1400; risk_tier=Low,Analyst
+2026-05-31T14:15:29.677614+00:00,prediction_generated,145,risk_score=0.1800; risk_tier=Low,Analyst
+2026-05-31T14:15:29.698732+00:00,prediction_generated,146,risk_score=0.1800; risk_tier=Low,Analyst
+2026-05-31T14:15:29.720469+00:00,prediction_generated,147,risk_score=0.2250; risk_tier=Low,Analyst
+2026-05-31T14:15:29.740125+00:00,prediction_generated,148,risk_score=0.2200; risk_tier=Low,Analyst
+2026-05-31T14:15:29.759565+00:00,prediction_generated,149,risk_score=0.1650; risk_tier=Low,Analyst
+2026-05-31T14:15:29.779442+00:00,prediction_generated,150,risk_score=0.1700; risk_tier=Low,Analyst
+2026-05-31T14:15:29.800339+00:00,prediction_generated,151,risk_score=0.2400; risk_tier=Low,Analyst
+2026-05-31T14:15:29.821272+00:00,prediction_generated,152,risk_score=0.0650; risk_tier=Low,Analyst
+2026-05-31T14:15:29.841393+00:00,prediction_generated,153,risk_score=0.6100; risk_tier=Medium,Analyst
+2026-05-31T14:15:29.860539+00:00,prediction_generated,154,risk_score=0.2300; risk_tier=Low,Analyst
+2026-05-31T14:15:29.881457+00:00,prediction_generated,155,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:15:29.901823+00:00,prediction_generated,156,risk_score=0.1800; risk_tier=Low,Analyst
+2026-05-31T14:15:29.923313+00:00,prediction_generated,157,risk_score=0.3950; risk_tier=Low,Analyst
+2026-05-31T14:15:29.943819+00:00,prediction_generated,158,risk_score=0.1350; risk_tier=Low,Analyst
+2026-05-31T14:15:29.963615+00:00,prediction_generated,159,risk_score=0.2650; risk_tier=Low,Analyst
+2026-05-31T14:15:29.986709+00:00,prediction_generated,160,risk_score=0.1450; risk_tier=Low,Analyst
+2026-05-31T14:15:30.010350+00:00,prediction_generated,161,risk_score=0.5400; risk_tier=Medium,Analyst
+2026-05-31T14:15:30.031475+00:00,prediction_generated,162,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:15:30.051243+00:00,prediction_generated,163,risk_score=0.1550; risk_tier=Low,Analyst
+2026-05-31T14:15:30.070439+00:00,prediction_generated,164,risk_score=0.1800; risk_tier=Low,Analyst
+2026-05-31T14:15:30.089809+00:00,prediction_generated,165,risk_score=0.2450; risk_tier=Low,Analyst
+2026-05-31T14:15:30.108592+00:00,prediction_generated,166,risk_score=0.2800; risk_tier=Low,Analyst
+2026-05-31T14:15:30.129267+00:00,prediction_generated,167,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:15:30.148842+00:00,prediction_generated,168,risk_score=0.2300; risk_tier=Low,Analyst
+2026-05-31T14:15:30.167554+00:00,prediction_generated,169,risk_score=0.1150; risk_tier=Low,Analyst
+2026-05-31T14:15:30.186836+00:00,prediction_generated,170,risk_score=0.1500; risk_tier=Low,Analyst
+2026-05-31T14:15:30.212425+00:00,prediction_generated,171,risk_score=0.5500; risk_tier=Medium,Analyst
+2026-05-31T14:15:30.234915+00:00,prediction_generated,172,risk_score=0.2300; risk_tier=Low,Analyst
+2026-05-31T14:15:30.254950+00:00,prediction_generated,173,risk_score=0.5600; risk_tier=Medium,Analyst
+2026-05-31T14:15:30.277528+00:00,prediction_generated,174,risk_score=0.1300; risk_tier=Low,Analyst
+2026-05-31T14:15:30.297755+00:00,prediction_generated,175,risk_score=0.3500; risk_tier=Low,Analyst
+2026-05-31T14:15:30.317015+00:00,prediction_generated,176,risk_score=0.1600; risk_tier=Low,Analyst
+2026-05-31T14:15:30.336247+00:00,prediction_generated,177,risk_score=0.1250; risk_tier=Low,Analyst
+2026-05-31T14:15:30.356104+00:00,prediction_generated,178,risk_score=0.2850; risk_tier=Low,Analyst
+2026-05-31T14:15:30.377716+00:00,prediction_generated,179,risk_score=0.1200; risk_tier=Low,Analyst
+2026-05-31T14:15:30.397444+00:00,prediction_generated,180,risk_score=0.2300; risk_tier=Low,Analyst
+2026-05-31T14:15:30.418860+00:00,prediction_generated,181,risk_score=0.1600; risk_tier=Low,Analyst
+2026-05-31T14:15:30.439106+00:00,prediction_generated,182,risk_score=0.2450; risk_tier=Low,Analyst
+2026-05-31T14:15:30.460174+00:00,prediction_generated,183,risk_score=0.2650; risk_tier=Low,Analyst
+2026-05-31T14:15:30.481481+00:00,prediction_generated,184,risk_score=0.2050; risk_tier=Low,Analyst
+2026-05-31T14:15:30.503371+00:00,prediction_generated,185,risk_score=0.2150; risk_tier=Low,Analyst
+2026-05-31T14:15:30.523854+00:00,prediction_generated,186,risk_score=0.5150; risk_tier=Medium,Analyst
+2026-05-31T14:15:30.545390+00:00,prediction_generated,187,risk_score=0.2300; risk_tier=Low,Analyst
+2026-05-31T14:15:30.564494+00:00,prediction_generated,188,risk_score=0.2900; risk_tier=Low,Analyst
+2026-05-31T14:15:30.585513+00:00,prediction_generated,189,risk_score=0.4800; risk_tier=Low,Analyst
+2026-05-31T14:15:30.603468+00:00,prediction_generated,190,risk_score=0.1750; risk_tier=Low,Analyst
+2026-05-31T14:15:30.624690+00:00,prediction_generated,191,risk_score=0.2350; risk_tier=Low,Analyst
+2026-05-31T14:15:30.643712+00:00,prediction_generated,192,risk_score=0.2150; risk_tier=Low,Analyst
+2026-05-31T14:15:30.662736+00:00,prediction_generated,193,risk_score=0.0800; risk_tier=Low,Analyst
+2026-05-31T14:15:30.682551+00:00,prediction_generated,194,risk_score=0.1750; risk_tier=Low,Analyst
+2026-05-31T14:15:30.702227+00:00,prediction_generated,195,risk_score=0.1500; risk_tier=Low,Analyst
+2026-05-31T14:15:30.721913+00:00,prediction_generated,196,risk_score=0.1400; risk_tier=Low,Analyst
+2026-05-31T14:15:30.741385+00:00,prediction_generated,197,risk_score=0.2950; risk_tier=Low,Analyst
+2026-05-31T14:15:30.763166+00:00,prediction_generated,198,risk_score=0.2450; risk_tier=Low,Analyst
+2026-05-31T14:15:30.784570+00:00,prediction_generated,199,risk_score=0.2600; risk_tier=Low,Analyst
+2026-05-31T14:15:30.802997+00:00,prediction_generated,200,risk_score=0.3750; risk_tier=Low,Analyst
+2026-05-31T14:15:30.822272+00:00,prediction_generated,201,risk_score=0.1600; risk_tier=Low,Analyst
+2026-05-31T14:15:30.841185+00:00,prediction_generated,202,risk_score=0.1700; risk_tier=Low,Analyst
+2026-05-31T14:15:30.862208+00:00,prediction_generated,203,risk_score=0.2700; risk_tier=Low,Analyst
+2026-05-31T14:15:30.881482+00:00,prediction_generated,204,risk_score=0.0750; risk_tier=Low,Analyst
+2026-05-31T14:15:30.899505+00:00,prediction_generated,205,risk_score=0.1850; risk_tier=Low,Analyst
+2026-05-31T14:15:30.919150+00:00,prediction_generated,206,risk_score=0.2050; risk_tier=Low,Analyst
+2026-05-31T14:15:30.939308+00:00,prediction_generated,207,risk_score=0.4250; risk_tier=Low,Analyst
+2026-05-31T14:15:30.960305+00:00,prediction_generated,208,risk_score=0.2250; risk_tier=Low,Analyst
+2026-05-31T14:15:30.979235+00:00,prediction_generated,209,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:15:31.001412+00:00,prediction_generated,210,risk_score=0.1700; risk_tier=Low,Analyst
+2026-05-31T14:15:31.023977+00:00,prediction_generated,211,risk_score=0.1700; risk_tier=Low,Analyst
+2026-05-31T14:15:31.046663+00:00,prediction_generated,212,risk_score=0.1800; risk_tier=Low,Analyst
+2026-05-31T14:15:31.070158+00:00,prediction_generated,213,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:15:31.091245+00:00,prediction_generated,214,risk_score=0.1800; risk_tier=Low,Analyst
+2026-05-31T14:15:31.114746+00:00,prediction_generated,215,risk_score=0.1250; risk_tier=Low,Analyst
+2026-05-31T14:15:31.137550+00:00,prediction_generated,216,risk_score=0.2900; risk_tier=Low,Analyst
+2026-05-31T14:15:31.158563+00:00,prediction_generated,217,risk_score=0.3000; risk_tier=Low,Analyst
+2026-05-31T14:15:31.179873+00:00,prediction_generated,218,risk_score=0.0800; risk_tier=Low,Analyst
+2026-05-31T14:15:31.201420+00:00,prediction_generated,219,risk_score=0.1550; risk_tier=Low,Analyst
+2026-05-31T14:15:31.223247+00:00,prediction_generated,220,risk_score=0.3150; risk_tier=Low,Analyst
+2026-05-31T14:15:31.246551+00:00,prediction_generated,221,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:15:31.267412+00:00,prediction_generated,222,risk_score=0.2000; risk_tier=Low,Analyst
+2026-05-31T14:15:31.292139+00:00,prediction_generated,223,risk_score=0.2050; risk_tier=Low,Analyst
+2026-05-31T14:15:31.313565+00:00,prediction_generated,224,risk_score=0.2000; risk_tier=Low,Analyst
+2026-05-31T14:15:31.336703+00:00,prediction_generated,225,risk_score=0.2400; risk_tier=Low,Analyst
+2026-05-31T14:15:31.357305+00:00,prediction_generated,226,risk_score=0.1150; risk_tier=Low,Analyst
+2026-05-31T14:15:31.380184+00:00,prediction_generated,227,risk_score=0.2600; risk_tier=Low,Analyst
+2026-05-31T14:15:31.397757+00:00,prediction_generated,228,risk_score=0.4900; risk_tier=Low,Analyst
+2026-05-31T14:15:31.419102+00:00,prediction_generated,229,risk_score=0.5250; risk_tier=Medium,Analyst
+2026-05-31T14:15:31.442835+00:00,prediction_generated,230,risk_score=0.1650; risk_tier=Low,Analyst
+2026-05-31T14:15:31.466385+00:00,prediction_generated,231,risk_score=0.2950; risk_tier=Low,Analyst
+2026-05-31T14:15:31.490938+00:00,prediction_generated,232,risk_score=0.5800; risk_tier=Medium,Analyst
+2026-05-31T14:15:31.509923+00:00,prediction_generated,233,risk_score=0.6200; risk_tier=Medium,Analyst
+2026-05-31T14:15:31.531363+00:00,prediction_generated,234,risk_score=0.2700; risk_tier=Low,Analyst
+2026-05-31T14:15:31.557811+00:00,prediction_generated,235,risk_score=0.1700; risk_tier=Low,Analyst
+2026-05-31T14:15:31.576367+00:00,prediction_generated,236,risk_score=0.5200; risk_tier=Medium,Analyst
+2026-05-31T14:15:31.597622+00:00,prediction_generated,237,risk_score=0.2450; risk_tier=Low,Analyst
+2026-05-31T14:15:31.618762+00:00,prediction_generated,238,risk_score=0.3100; risk_tier=Low,Analyst
+2026-05-31T14:15:31.639064+00:00,prediction_generated,239,risk_score=0.5750; risk_tier=Medium,Analyst
+2026-05-31T14:15:31.657159+00:00,prediction_generated,240,risk_score=0.1150; risk_tier=Low,Analyst
+2026-05-31T14:15:31.679512+00:00,prediction_generated,241,risk_score=0.1600; risk_tier=Low,Analyst
+2026-05-31T14:15:31.698968+00:00,prediction_generated,242,risk_score=0.1900; risk_tier=Low,Analyst
+2026-05-31T14:15:31.721215+00:00,prediction_generated,243,risk_score=0.1100; risk_tier=Low,Analyst
+2026-05-31T14:15:31.743746+00:00,prediction_generated,244,risk_score=0.1000; risk_tier=Low,Analyst
+2026-05-31T14:15:31.766466+00:00,prediction_generated,245,risk_score=0.2000; risk_tier=Low,Analyst
+2026-05-31T14:15:31.792115+00:00,prediction_generated,246,risk_score=0.2050; risk_tier=Low,Analyst
+2026-05-31T14:15:31.815635+00:00,prediction_generated,247,risk_score=0.1400; risk_tier=Low,Analyst
+2026-05-31T14:15:31.838614+00:00,prediction_generated,248,risk_score=0.3750; risk_tier=Low,Analyst
+2026-05-31T14:15:31.857485+00:00,prediction_generated,249,risk_score=0.3300; risk_tier=Low,Analyst
+2026-05-31T14:15:31.879250+00:00,prediction_generated,250,risk_score=0.1550; risk_tier=Low,Analyst
+2026-05-31T14:15:31.899608+00:00,prediction_generated,251,risk_score=0.0800; risk_tier=Low,Analyst
+2026-05-31T14:15:31.922141+00:00,prediction_generated,252,risk_score=0.2250; risk_tier=Low,Analyst
+2026-05-31T14:15:31.944379+00:00,prediction_generated,253,risk_score=0.1600; risk_tier=Low,Analyst
+2026-05-31T14:15:31.965360+00:00,prediction_generated,254,risk_score=0.2900; risk_tier=Low,Analyst
+2026-05-31T14:15:31.986114+00:00,prediction_generated,255,risk_score=0.5350; risk_tier=Medium,Analyst
+2026-05-31T14:15:32.007759+00:00,prediction_generated,256,risk_score=0.1300; risk_tier=Low,Analyst
+2026-05-31T14:15:32.029173+00:00,prediction_generated,257,risk_score=0.1450; risk_tier=Low,Analyst
+2026-05-31T14:15:32.047771+00:00,prediction_generated,258,risk_score=0.2200; risk_tier=Low,Analyst
+2026-05-31T14:15:32.068299+00:00,prediction_generated,259,risk_score=0.1600; risk_tier=Low,Analyst
+2026-05-31T14:15:32.086849+00:00,prediction_generated,260,risk_score=0.2000; risk_tier=Low,Analyst
+2026-05-31T14:15:32.107691+00:00,prediction_generated,261,risk_score=0.2200; risk_tier=Low,Analyst
+2026-05-31T14:15:32.128327+00:00,prediction_generated,262,risk_score=0.1900; risk_tier=Low,Analyst
+2026-05-31T14:15:32.148892+00:00,prediction_generated,263,risk_score=0.1450; risk_tier=Low,Analyst
+2026-05-31T14:15:32.169125+00:00,prediction_generated,264,risk_score=0.1500; risk_tier=Low,Analyst
+2026-05-31T14:15:32.193915+00:00,prediction_generated,265,risk_score=0.1850; risk_tier=Low,Analyst
+2026-05-31T14:15:32.216974+00:00,prediction_generated,266,risk_score=0.3150; risk_tier=Low,Analyst
+2026-05-31T14:15:32.241315+00:00,prediction_generated,267,risk_score=0.1150; risk_tier=Low,Analyst
+2026-05-31T14:15:32.265090+00:00,prediction_generated,268,risk_score=0.2250; risk_tier=Low,Analyst
+2026-05-31T14:15:32.283866+00:00,prediction_generated,269,risk_score=0.2250; risk_tier=Low,Analyst
+2026-05-31T14:15:32.305234+00:00,prediction_generated,270,risk_score=0.1100; risk_tier=Low,Analyst
+2026-05-31T14:15:32.327511+00:00,prediction_generated,271,risk_score=0.2650; risk_tier=Low,Analyst
+2026-05-31T14:15:32.348608+00:00,prediction_generated,272,risk_score=0.2150; risk_tier=Low,Analyst
+2026-05-31T14:15:32.373828+00:00,prediction_generated,273,risk_score=0.2350; risk_tier=Low,Analyst
+2026-05-31T14:15:32.395718+00:00,prediction_generated,274,risk_score=0.2550; risk_tier=Low,Analyst
+2026-05-31T14:15:32.417002+00:00,prediction_generated,275,risk_score=0.3550; risk_tier=Low,Analyst
+2026-05-31T14:15:32.437571+00:00,prediction_generated,276,risk_score=0.1600; risk_tier=Low,Analyst
+2026-05-31T14:15:32.459499+00:00,prediction_generated,277,risk_score=0.2250; risk_tier=Low,Analyst
+2026-05-31T14:15:32.479485+00:00,prediction_generated,278,risk_score=0.1500; risk_tier=Low,Analyst
+2026-05-31T14:15:32.500242+00:00,prediction_generated,279,risk_score=0.5700; risk_tier=Medium,Analyst
+2026-05-31T14:15:32.521424+00:00,prediction_generated,280,risk_score=0.2800; risk_tier=Low,Analyst
+2026-05-31T14:15:32.543314+00:00,prediction_generated,281,risk_score=0.2050; risk_tier=Low,Analyst
+2026-05-31T14:15:32.565292+00:00,prediction_generated,282,risk_score=0.1250; risk_tier=Low,Analyst
+2026-05-31T14:15:32.584716+00:00,prediction_generated,283,risk_score=0.1650; risk_tier=Low,Analyst
+2026-05-31T14:15:32.611400+00:00,prediction_generated,284,risk_score=0.1100; risk_tier=Low,Analyst
+2026-05-31T14:15:32.636516+00:00,prediction_generated,285,risk_score=0.1500; risk_tier=Low,Analyst
+2026-05-31T14:15:32.657353+00:00,prediction_generated,286,risk_score=0.1700; risk_tier=Low,Analyst
+2026-05-31T14:15:32.680134+00:00,prediction_generated,287,risk_score=0.2550; risk_tier=Low,Analyst
+2026-05-31T14:15:32.700557+00:00,prediction_generated,288,risk_score=0.1850; risk_tier=Low,Analyst
+2026-05-31T14:15:32.720319+00:00,prediction_generated,289,risk_score=0.2550; risk_tier=Low,Analyst
+2026-05-31T14:15:32.742014+00:00,prediction_generated,290,risk_score=0.2750; risk_tier=Low,Analyst
+2026-05-31T14:15:32.762926+00:00,prediction_generated,291,risk_score=0.1300; risk_tier=Low,Analyst
+2026-05-31T14:15:32.785677+00:00,prediction_generated,292,risk_score=0.2550; risk_tier=Low,Analyst
+2026-05-31T14:15:32.806684+00:00,prediction_generated,293,risk_score=0.2400; risk_tier=Low,Analyst
+2026-05-31T14:15:32.827857+00:00,prediction_generated,294,risk_score=0.1400; risk_tier=Low,Analyst
+2026-05-31T14:15:32.851211+00:00,prediction_generated,295,risk_score=0.2950; risk_tier=Low,Analyst
+2026-05-31T14:15:32.873096+00:00,prediction_generated,296,risk_score=0.2400; risk_tier=Low,Analyst
+2026-05-31T14:15:32.892463+00:00,prediction_generated,297,risk_score=0.2000; risk_tier=Low,Analyst
+2026-05-31T14:15:32.913139+00:00,prediction_generated,298,risk_score=0.2400; risk_tier=Low,Analyst
+2026-05-31T14:15:32.933891+00:00,prediction_generated,299,risk_score=0.1150; risk_tier=Low,Analyst
+2026-05-31T14:21:48.191597+00:00,customer_risk_status_changed,,customer_id=9272208886; old=Critical; new=Critical; pep=False,Analyst
+2026-05-31T14:22:15.015928+00:00,critical_customer_approved,,customer_id=9272208886; approved_by=Analyst,Analyst
+2026-05-31T14:34:36.213630+00:00,cdd_case_updated,118,case_id=CDD-268AAE8F; cdd_level=Standard; status=Open,John.Doe
+2026-05-31T14:34:51.086087+00:00,alert_dismissed,118,rf_prediction=0; reason=False positive,John.Doe
+2026-05-31T14:37:41.160040+00:00,alert_escalated,44,case_id=CDD-A23E5895; risk_tier=Medium,John.Doe
+2026-05-31T14:39:18.969028+00:00,case_escalated_to_str,44,case_id=CDD-A23E5895; cdd_level=Enhanced,John.Doe
+2026-05-31T14:42:19.944447+00:00,dataset_uploaded,,filename=aml_demo_data.csv; row_count=300; flagged=22,Analyst
+2026-05-31T14:42:19.969988+00:00,prediction_generated,0,risk_score=0.1300; risk_tier=Low,Analyst
+2026-05-31T14:42:19.994675+00:00,prediction_generated,1,risk_score=0.1200; risk_tier=Low,Analyst
+2026-05-31T14:42:20.024756+00:00,prediction_generated,2,risk_score=0.5400; risk_tier=Medium,Analyst
+2026-05-31T14:42:20.047917+00:00,prediction_generated,3,risk_score=0.3750; risk_tier=Low,Analyst
+2026-05-31T14:42:20.071979+00:00,prediction_generated,4,risk_score=0.2450; risk_tier=Low,Analyst
+2026-05-31T14:42:20.100483+00:00,prediction_generated,5,risk_score=0.1750; risk_tier=Low,Analyst
+2026-05-31T14:42:20.131523+00:00,prediction_generated,6,risk_score=0.1350; risk_tier=Low,Analyst
+2026-05-31T14:42:20.155256+00:00,prediction_generated,7,risk_score=0.1800; risk_tier=Low,Analyst
+2026-05-31T14:42:20.179342+00:00,prediction_generated,8,risk_score=0.1650; risk_tier=Low,Analyst
+2026-05-31T14:42:20.202329+00:00,prediction_generated,9,risk_score=0.2550; risk_tier=Low,Analyst
+2026-05-31T14:42:20.225964+00:00,prediction_generated,10,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:42:20.252305+00:00,prediction_generated,11,risk_score=0.1250; risk_tier=Low,Analyst
+2026-05-31T14:42:20.275823+00:00,prediction_generated,12,risk_score=0.1300; risk_tier=Low,Analyst
+2026-05-31T14:42:20.303954+00:00,prediction_generated,13,risk_score=0.1450; risk_tier=Low,Analyst
+2026-05-31T14:42:20.330908+00:00,prediction_generated,14,risk_score=0.4000; risk_tier=Low,Analyst
+2026-05-31T14:42:20.355242+00:00,prediction_generated,15,risk_score=0.2750; risk_tier=Low,Analyst
+2026-05-31T14:42:20.377891+00:00,prediction_generated,16,risk_score=0.2450; risk_tier=Low,Analyst
+2026-05-31T14:42:20.399456+00:00,prediction_generated,17,risk_score=0.1550; risk_tier=Low,Analyst
+2026-05-31T14:42:20.420630+00:00,prediction_generated,18,risk_score=0.2250; risk_tier=Low,Analyst
+2026-05-31T14:42:20.441358+00:00,prediction_generated,19,risk_score=0.1400; risk_tier=Low,Analyst
+2026-05-31T14:42:20.463465+00:00,prediction_generated,20,risk_score=0.5550; risk_tier=Medium,Analyst
+2026-05-31T14:42:20.488770+00:00,prediction_generated,21,risk_score=0.1800; risk_tier=Low,Analyst
+2026-05-31T14:42:20.510879+00:00,prediction_generated,22,risk_score=0.1650; risk_tier=Low,Analyst
+2026-05-31T14:42:20.537167+00:00,prediction_generated,23,risk_score=0.1600; risk_tier=Low,Analyst
+2026-05-31T14:42:20.556712+00:00,prediction_generated,24,risk_score=0.2150; risk_tier=Low,Analyst
+2026-05-31T14:42:20.579578+00:00,prediction_generated,25,risk_score=0.2350; risk_tier=Low,Analyst
+2026-05-31T14:42:20.604008+00:00,prediction_generated,26,risk_score=0.2150; risk_tier=Low,Analyst
+2026-05-31T14:42:20.629435+00:00,prediction_generated,27,risk_score=0.1150; risk_tier=Low,Analyst
+2026-05-31T14:42:20.681365+00:00,prediction_generated,28,risk_score=0.2400; risk_tier=Low,Analyst
+2026-05-31T14:42:20.702693+00:00,prediction_generated,29,risk_score=0.1900; risk_tier=Low,Analyst
+2026-05-31T14:42:20.727649+00:00,prediction_generated,30,risk_score=0.2650; risk_tier=Low,Analyst
+2026-05-31T14:42:20.753872+00:00,prediction_generated,31,risk_score=0.2600; risk_tier=Low,Analyst
+2026-05-31T14:42:20.781594+00:00,prediction_generated,32,risk_score=0.0750; risk_tier=Low,Analyst
+2026-05-31T14:42:20.806913+00:00,prediction_generated,33,risk_score=0.2750; risk_tier=Low,Analyst
+2026-05-31T14:42:20.835900+00:00,prediction_generated,34,risk_score=0.0950; risk_tier=Low,Analyst
+2026-05-31T14:42:20.857744+00:00,prediction_generated,35,risk_score=0.1500; risk_tier=Low,Analyst
+2026-05-31T14:42:20.880274+00:00,prediction_generated,36,risk_score=0.6050; risk_tier=Medium,Analyst
+2026-05-31T14:42:20.905694+00:00,prediction_generated,37,risk_score=0.0850; risk_tier=Low,Analyst
+2026-05-31T14:42:20.929485+00:00,prediction_generated,38,risk_score=0.2700; risk_tier=Low,Analyst
+2026-05-31T14:42:20.952911+00:00,prediction_generated,39,risk_score=0.2450; risk_tier=Low,Analyst
+2026-05-31T14:42:20.980177+00:00,prediction_generated,40,risk_score=0.2750; risk_tier=Low,Analyst
+2026-05-31T14:42:21.007016+00:00,prediction_generated,41,risk_score=0.2750; risk_tier=Low,Analyst
+2026-05-31T14:42:21.035617+00:00,prediction_generated,42,risk_score=0.2300; risk_tier=Low,Analyst
+2026-05-31T14:42:21.056829+00:00,prediction_generated,43,risk_score=0.1000; risk_tier=Low,Analyst
+2026-05-31T14:42:21.077520+00:00,prediction_generated,44,risk_score=0.6200; risk_tier=Medium,Analyst
+2026-05-31T14:42:21.099071+00:00,prediction_generated,45,risk_score=0.1850; risk_tier=Low,Analyst
+2026-05-31T14:42:21.118886+00:00,prediction_generated,46,risk_score=0.1700; risk_tier=Low,Analyst
+2026-05-31T14:42:21.139419+00:00,prediction_generated,47,risk_score=0.5350; risk_tier=Medium,Analyst
+2026-05-31T14:42:21.162871+00:00,prediction_generated,48,risk_score=0.0850; risk_tier=Low,Analyst
+2026-05-31T14:42:21.184973+00:00,prediction_generated,49,risk_score=0.1150; risk_tier=Low,Analyst
+2026-05-31T14:42:21.208438+00:00,prediction_generated,50,risk_score=0.2450; risk_tier=Low,Analyst
+2026-05-31T14:42:21.229785+00:00,prediction_generated,51,risk_score=0.2000; risk_tier=Low,Analyst
+2026-05-31T14:42:21.250968+00:00,prediction_generated,52,risk_score=0.1100; risk_tier=Low,Analyst
+2026-05-31T14:42:21.270244+00:00,prediction_generated,53,risk_score=0.2350; risk_tier=Low,Analyst
+2026-05-31T14:42:21.291262+00:00,prediction_generated,54,risk_score=0.2600; risk_tier=Low,Analyst
+2026-05-31T14:42:21.315265+00:00,prediction_generated,55,risk_score=0.3200; risk_tier=Low,Analyst
+2026-05-31T14:42:21.336249+00:00,prediction_generated,56,risk_score=0.0750; risk_tier=Low,Analyst
+2026-05-31T14:42:21.355781+00:00,prediction_generated,57,risk_score=0.1650; risk_tier=Low,Analyst
+2026-05-31T14:42:21.377398+00:00,prediction_generated,58,risk_score=0.1350; risk_tier=Low,Analyst
+2026-05-31T14:42:21.399591+00:00,prediction_generated,59,risk_score=0.2600; risk_tier=Low,Analyst
+2026-05-31T14:42:21.420383+00:00,prediction_generated,60,risk_score=0.1500; risk_tier=Low,Analyst
+2026-05-31T14:42:21.445113+00:00,prediction_generated,61,risk_score=0.1600; risk_tier=Low,Analyst
+2026-05-31T14:42:21.466906+00:00,prediction_generated,62,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:42:21.488300+00:00,prediction_generated,63,risk_score=0.2900; risk_tier=Low,Analyst
+2026-05-31T14:42:21.511722+00:00,prediction_generated,64,risk_score=0.0750; risk_tier=Low,Analyst
+2026-05-31T14:42:21.534555+00:00,prediction_generated,65,risk_score=0.1550; risk_tier=Low,Analyst
+2026-05-31T14:42:21.557007+00:00,prediction_generated,66,risk_score=0.1300; risk_tier=Low,Analyst
+2026-05-31T14:42:21.579375+00:00,prediction_generated,67,risk_score=0.1400; risk_tier=Low,Analyst
+2026-05-31T14:42:21.600234+00:00,prediction_generated,68,risk_score=0.2850; risk_tier=Low,Analyst
+2026-05-31T14:42:21.626069+00:00,prediction_generated,69,risk_score=0.2100; risk_tier=Low,Analyst
+2026-05-31T14:42:21.651672+00:00,prediction_generated,70,risk_score=0.1150; risk_tier=Low,Analyst
+2026-05-31T14:42:21.677396+00:00,prediction_generated,71,risk_score=0.2700; risk_tier=Low,Analyst
+2026-05-31T14:42:21.750521+00:00,prediction_generated,72,risk_score=0.2300; risk_tier=Low,Analyst
+2026-05-31T14:42:21.773353+00:00,prediction_generated,73,risk_score=0.2550; risk_tier=Low,Analyst
+2026-05-31T14:42:21.797593+00:00,prediction_generated,74,risk_score=0.0950; risk_tier=Low,Analyst
+2026-05-31T14:42:21.821905+00:00,prediction_generated,75,risk_score=0.2300; risk_tier=Low,Analyst
+2026-05-31T14:42:21.847374+00:00,prediction_generated,76,risk_score=0.1550; risk_tier=Low,Analyst
+2026-05-31T14:42:21.872825+00:00,prediction_generated,77,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:42:21.898195+00:00,prediction_generated,78,risk_score=0.2450; risk_tier=Low,Analyst
+2026-05-31T14:42:21.921950+00:00,prediction_generated,79,risk_score=0.2400; risk_tier=Low,Analyst
+2026-05-31T14:42:21.945761+00:00,prediction_generated,80,risk_score=0.2600; risk_tier=Low,Analyst
+2026-05-31T14:42:21.971663+00:00,prediction_generated,81,risk_score=0.1500; risk_tier=Low,Analyst
+2026-05-31T14:42:21.999764+00:00,prediction_generated,82,risk_score=0.1750; risk_tier=Low,Analyst
+2026-05-31T14:42:22.027149+00:00,prediction_generated,83,risk_score=0.2150; risk_tier=Low,Analyst
+2026-05-31T14:42:22.048900+00:00,prediction_generated,84,risk_score=0.0850; risk_tier=Low,Analyst
+2026-05-31T14:42:22.072347+00:00,prediction_generated,85,risk_score=0.3050; risk_tier=Low,Analyst
+2026-05-31T14:42:22.094963+00:00,prediction_generated,86,risk_score=0.1900; risk_tier=Low,Analyst
+2026-05-31T14:42:22.122514+00:00,prediction_generated,87,risk_score=0.3150; risk_tier=Low,Analyst
+2026-05-31T14:42:22.147540+00:00,prediction_generated,88,risk_score=0.5200; risk_tier=Medium,Analyst
+2026-05-31T14:42:22.172413+00:00,prediction_generated,89,risk_score=0.0800; risk_tier=Low,Analyst
+2026-05-31T14:42:22.200276+00:00,prediction_generated,90,risk_score=0.2650; risk_tier=Low,Analyst
+2026-05-31T14:42:22.222058+00:00,prediction_generated,91,risk_score=0.2150; risk_tier=Low,Analyst
+2026-05-31T14:42:22.246347+00:00,prediction_generated,92,risk_score=0.3850; risk_tier=Low,Analyst
+2026-05-31T14:42:22.272225+00:00,prediction_generated,93,risk_score=0.2550; risk_tier=Low,Analyst
+2026-05-31T14:42:22.300620+00:00,prediction_generated,94,risk_score=0.1750; risk_tier=Low,Analyst
+2026-05-31T14:42:22.323334+00:00,prediction_generated,95,risk_score=0.1950; risk_tier=Low,Analyst
+2026-05-31T14:42:22.343297+00:00,prediction_generated,96,risk_score=0.2400; risk_tier=Low,Analyst
+2026-05-31T14:42:22.365198+00:00,prediction_generated,97,risk_score=0.3150; risk_tier=Low,Analyst
+2026-05-31T14:42:22.390584+00:00,prediction_generated,98,risk_score=0.2700; risk_tier=Low,Analyst
+2026-05-31T14:42:22.412962+00:00,prediction_generated,99,risk_score=0.2100; risk_tier=Low,Analyst
+2026-05-31T14:42:22.440837+00:00,prediction_generated,100,risk_score=0.1950; risk_tier=Low,Analyst
+2026-05-31T14:42:22.469168+00:00,prediction_generated,101,risk_score=0.2950; risk_tier=Low,Analyst
+2026-05-31T14:42:22.494609+00:00,prediction_generated,102,risk_score=0.1150; risk_tier=Low,Analyst
+2026-05-31T14:42:22.515626+00:00,prediction_generated,103,risk_score=0.1900; risk_tier=Low,Analyst
+2026-05-31T14:42:22.537200+00:00,prediction_generated,104,risk_score=0.2050; risk_tier=Low,Analyst
+2026-05-31T14:42:22.562918+00:00,prediction_generated,105,risk_score=0.3250; risk_tier=Low,Analyst
+2026-05-31T14:42:22.585971+00:00,prediction_generated,106,risk_score=0.2150; risk_tier=Low,Analyst
+2026-05-31T14:42:22.611834+00:00,prediction_generated,107,risk_score=0.5650; risk_tier=Medium,Analyst
+2026-05-31T14:42:22.638340+00:00,prediction_generated,108,risk_score=0.1600; risk_tier=Low,Analyst
+2026-05-31T14:42:22.663709+00:00,prediction_generated,109,risk_score=0.0850; risk_tier=Low,Analyst
+2026-05-31T14:42:22.689824+00:00,prediction_generated,110,risk_score=0.2750; risk_tier=Low,Analyst
+2026-05-31T14:42:22.719136+00:00,prediction_generated,111,risk_score=0.0950; risk_tier=Low,Analyst
+2026-05-31T14:42:22.927614+00:00,prediction_generated,112,risk_score=0.3000; risk_tier=Low,Analyst
+2026-05-31T14:42:22.952554+00:00,prediction_generated,113,risk_score=0.2000; risk_tier=Low,Analyst
+2026-05-31T14:42:22.979990+00:00,prediction_generated,114,risk_score=0.4550; risk_tier=Low,Analyst
+2026-05-31T14:42:23.005089+00:00,prediction_generated,115,risk_score=0.2950; risk_tier=Low,Analyst
+2026-05-31T14:42:23.030328+00:00,prediction_generated,116,risk_score=0.1850; risk_tier=Low,Analyst
+2026-05-31T14:42:23.056748+00:00,prediction_generated,117,risk_score=0.2650; risk_tier=Low,Analyst
+2026-05-31T14:42:23.083542+00:00,prediction_generated,118,risk_score=0.6250; risk_tier=Medium,Analyst
+2026-05-31T14:42:23.112103+00:00,prediction_generated,119,risk_score=0.1200; risk_tier=Low,Analyst
+2026-05-31T14:42:23.139527+00:00,prediction_generated,120,risk_score=0.5950; risk_tier=Medium,Analyst
+2026-05-31T14:42:23.168833+00:00,prediction_generated,121,risk_score=0.2650; risk_tier=Low,Analyst
+2026-05-31T14:42:23.199238+00:00,prediction_generated,122,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:42:23.227534+00:00,prediction_generated,123,risk_score=0.2650; risk_tier=Low,Analyst
+2026-05-31T14:42:23.255460+00:00,prediction_generated,124,risk_score=0.3400; risk_tier=Low,Analyst
+2026-05-31T14:42:23.279383+00:00,prediction_generated,125,risk_score=0.1500; risk_tier=Low,Analyst
+2026-05-31T14:42:23.301488+00:00,prediction_generated,126,risk_score=0.1300; risk_tier=Low,Analyst
+2026-05-31T14:42:23.327415+00:00,prediction_generated,127,risk_score=0.4350; risk_tier=Low,Analyst
+2026-05-31T14:42:23.350635+00:00,prediction_generated,128,risk_score=0.2600; risk_tier=Low,Analyst
+2026-05-31T14:42:23.375642+00:00,prediction_generated,129,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:42:23.401266+00:00,prediction_generated,130,risk_score=0.1200; risk_tier=Low,Analyst
+2026-05-31T14:42:23.423520+00:00,prediction_generated,131,risk_score=0.1800; risk_tier=Low,Analyst
+2026-05-31T14:42:23.446881+00:00,prediction_generated,132,risk_score=0.1150; risk_tier=Low,Analyst
+2026-05-31T14:42:23.472042+00:00,prediction_generated,133,risk_score=0.2300; risk_tier=Low,Analyst
+2026-05-31T14:42:23.498035+00:00,prediction_generated,134,risk_score=0.2150; risk_tier=Low,Analyst
+2026-05-31T14:42:23.521902+00:00,prediction_generated,135,risk_score=0.1350; risk_tier=Low,Analyst
+2026-05-31T14:42:23.551952+00:00,prediction_generated,136,risk_score=0.5750; risk_tier=Medium,Analyst
+2026-05-31T14:42:23.580808+00:00,prediction_generated,137,risk_score=0.2950; risk_tier=Low,Analyst
+2026-05-31T14:42:23.605391+00:00,prediction_generated,138,risk_score=0.2900; risk_tier=Low,Analyst
+2026-05-31T14:42:23.632948+00:00,prediction_generated,139,risk_score=0.2050; risk_tier=Low,Analyst
+2026-05-31T14:42:23.658695+00:00,prediction_generated,140,risk_score=0.1350; risk_tier=Low,Analyst
+2026-05-31T14:42:23.683557+00:00,prediction_generated,141,risk_score=0.2800; risk_tier=Low,Analyst
+2026-05-31T14:42:23.708424+00:00,prediction_generated,142,risk_score=0.2350; risk_tier=Low,Analyst
+2026-05-31T14:42:23.734612+00:00,prediction_generated,143,risk_score=0.1450; risk_tier=Low,Analyst
+2026-05-31T14:42:23.757096+00:00,prediction_generated,144,risk_score=0.1400; risk_tier=Low,Analyst
+2026-05-31T14:42:23.782221+00:00,prediction_generated,145,risk_score=0.1800; risk_tier=Low,Analyst
+2026-05-31T14:42:23.805444+00:00,prediction_generated,146,risk_score=0.1800; risk_tier=Low,Analyst
+2026-05-31T14:42:23.829183+00:00,prediction_generated,147,risk_score=0.2250; risk_tier=Low,Analyst
+2026-05-31T14:42:23.852528+00:00,prediction_generated,148,risk_score=0.2200; risk_tier=Low,Analyst
+2026-05-31T14:42:23.878937+00:00,prediction_generated,149,risk_score=0.1650; risk_tier=Low,Analyst
+2026-05-31T14:42:23.904935+00:00,prediction_generated,150,risk_score=0.1700; risk_tier=Low,Analyst
+2026-05-31T14:42:23.929840+00:00,prediction_generated,151,risk_score=0.2400; risk_tier=Low,Analyst
+2026-05-31T14:42:23.957214+00:00,prediction_generated,152,risk_score=0.0650; risk_tier=Low,Analyst
+2026-05-31T14:42:23.982573+00:00,prediction_generated,153,risk_score=0.6100; risk_tier=Medium,Analyst
+2026-05-31T14:42:24.011742+00:00,prediction_generated,154,risk_score=0.2300; risk_tier=Low,Analyst
+2026-05-31T14:42:24.035941+00:00,prediction_generated,155,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:42:24.068848+00:00,prediction_generated,156,risk_score=0.1800; risk_tier=Low,Analyst
+2026-05-31T14:42:24.095839+00:00,prediction_generated,157,risk_score=0.3950; risk_tier=Low,Analyst
+2026-05-31T14:42:24.120594+00:00,prediction_generated,158,risk_score=0.1350; risk_tier=Low,Analyst
+2026-05-31T14:42:24.144458+00:00,prediction_generated,159,risk_score=0.2650; risk_tier=Low,Analyst
+2026-05-31T14:42:24.170062+00:00,prediction_generated,160,risk_score=0.1450; risk_tier=Low,Analyst
+2026-05-31T14:42:24.194266+00:00,prediction_generated,161,risk_score=0.5400; risk_tier=Medium,Analyst
+2026-05-31T14:42:24.219526+00:00,prediction_generated,162,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:42:24.243440+00:00,prediction_generated,163,risk_score=0.1550; risk_tier=Low,Analyst
+2026-05-31T14:42:24.268144+00:00,prediction_generated,164,risk_score=0.1800; risk_tier=Low,Analyst
+2026-05-31T14:42:24.290700+00:00,prediction_generated,165,risk_score=0.2450; risk_tier=Low,Analyst
+2026-05-31T14:42:24.316657+00:00,prediction_generated,166,risk_score=0.2800; risk_tier=Low,Analyst
+2026-05-31T14:42:24.339159+00:00,prediction_generated,167,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:42:24.370320+00:00,prediction_generated,168,risk_score=0.2300; risk_tier=Low,Analyst
+2026-05-31T14:42:24.393763+00:00,prediction_generated,169,risk_score=0.1150; risk_tier=Low,Analyst
+2026-05-31T14:42:24.414902+00:00,prediction_generated,170,risk_score=0.1500; risk_tier=Low,Analyst
+2026-05-31T14:42:24.442485+00:00,prediction_generated,171,risk_score=0.5500; risk_tier=Medium,Analyst
+2026-05-31T14:42:24.466934+00:00,prediction_generated,172,risk_score=0.2300; risk_tier=Low,Analyst
+2026-05-31T14:42:24.491004+00:00,prediction_generated,173,risk_score=0.5600; risk_tier=Medium,Analyst
+2026-05-31T14:42:24.516941+00:00,prediction_generated,174,risk_score=0.1300; risk_tier=Low,Analyst
+2026-05-31T14:42:24.542666+00:00,prediction_generated,175,risk_score=0.3500; risk_tier=Low,Analyst
+2026-05-31T14:42:24.564530+00:00,prediction_generated,176,risk_score=0.1600; risk_tier=Low,Analyst
+2026-05-31T14:42:24.589230+00:00,prediction_generated,177,risk_score=0.1250; risk_tier=Low,Analyst
+2026-05-31T14:42:24.613315+00:00,prediction_generated,178,risk_score=0.2850; risk_tier=Low,Analyst
+2026-05-31T14:42:24.640352+00:00,prediction_generated,179,risk_score=0.1200; risk_tier=Low,Analyst
+2026-05-31T14:42:24.667887+00:00,prediction_generated,180,risk_score=0.2300; risk_tier=Low,Analyst
+2026-05-31T14:42:24.694334+00:00,prediction_generated,181,risk_score=0.1600; risk_tier=Low,Analyst
+2026-05-31T14:42:24.729105+00:00,prediction_generated,182,risk_score=0.2450; risk_tier=Low,Analyst
+2026-05-31T14:42:24.754384+00:00,prediction_generated,183,risk_score=0.2650; risk_tier=Low,Analyst
+2026-05-31T14:42:24.778284+00:00,prediction_generated,184,risk_score=0.2050; risk_tier=Low,Analyst
+2026-05-31T14:42:24.803386+00:00,prediction_generated,185,risk_score=0.2150; risk_tier=Low,Analyst
+2026-05-31T14:42:24.829224+00:00,prediction_generated,186,risk_score=0.5150; risk_tier=Medium,Analyst
+2026-05-31T14:42:24.853601+00:00,prediction_generated,187,risk_score=0.2300; risk_tier=Low,Analyst
+2026-05-31T14:42:24.879952+00:00,prediction_generated,188,risk_score=0.2900; risk_tier=Low,Analyst
+2026-05-31T14:42:24.904274+00:00,prediction_generated,189,risk_score=0.4800; risk_tier=Low,Analyst
+2026-05-31T14:42:24.927641+00:00,prediction_generated,190,risk_score=0.1750; risk_tier=Low,Analyst
+2026-05-31T14:42:24.951775+00:00,prediction_generated,191,risk_score=0.2350; risk_tier=Low,Analyst
+2026-05-31T14:42:24.979258+00:00,prediction_generated,192,risk_score=0.2150; risk_tier=Low,Analyst
+2026-05-31T14:42:25.007441+00:00,prediction_generated,193,risk_score=0.0800; risk_tier=Low,Analyst
+2026-05-31T14:42:25.031128+00:00,prediction_generated,194,risk_score=0.1750; risk_tier=Low,Analyst
+2026-05-31T14:42:25.056721+00:00,prediction_generated,195,risk_score=0.1500; risk_tier=Low,Analyst
+2026-05-31T14:42:25.081394+00:00,prediction_generated,196,risk_score=0.1400; risk_tier=Low,Analyst
+2026-05-31T14:42:25.106045+00:00,prediction_generated,197,risk_score=0.2950; risk_tier=Low,Analyst
+2026-05-31T14:42:25.130876+00:00,prediction_generated,198,risk_score=0.2450; risk_tier=Low,Analyst
+2026-05-31T14:42:25.155745+00:00,prediction_generated,199,risk_score=0.2600; risk_tier=Low,Analyst
+2026-05-31T14:42:25.181616+00:00,prediction_generated,200,risk_score=0.3750; risk_tier=Low,Analyst
+2026-05-31T14:42:25.209986+00:00,prediction_generated,201,risk_score=0.1600; risk_tier=Low,Analyst
+2026-05-31T14:42:25.233005+00:00,prediction_generated,202,risk_score=0.1700; risk_tier=Low,Analyst
+2026-05-31T14:42:25.256873+00:00,prediction_generated,203,risk_score=0.2700; risk_tier=Low,Analyst
+2026-05-31T14:42:25.282931+00:00,prediction_generated,204,risk_score=0.0750; risk_tier=Low,Analyst
+2026-05-31T14:42:25.307795+00:00,prediction_generated,205,risk_score=0.1850; risk_tier=Low,Analyst
+2026-05-31T14:42:25.331313+00:00,prediction_generated,206,risk_score=0.2050; risk_tier=Low,Analyst
+2026-05-31T14:42:25.356902+00:00,prediction_generated,207,risk_score=0.4250; risk_tier=Low,Analyst
+2026-05-31T14:42:25.382800+00:00,prediction_generated,208,risk_score=0.2250; risk_tier=Low,Analyst
+2026-05-31T14:42:25.407708+00:00,prediction_generated,209,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:42:25.433028+00:00,prediction_generated,210,risk_score=0.1700; risk_tier=Low,Analyst
+2026-05-31T14:42:25.455327+00:00,prediction_generated,211,risk_score=0.1700; risk_tier=Low,Analyst
+2026-05-31T14:42:25.479032+00:00,prediction_generated,212,risk_score=0.1800; risk_tier=Low,Analyst
+2026-05-31T14:42:25.505710+00:00,prediction_generated,213,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:42:25.530630+00:00,prediction_generated,214,risk_score=0.1800; risk_tier=Low,Analyst
+2026-05-31T14:42:25.555263+00:00,prediction_generated,215,risk_score=0.1250; risk_tier=Low,Analyst
+2026-05-31T14:42:25.579979+00:00,prediction_generated,216,risk_score=0.2900; risk_tier=Low,Analyst
+2026-05-31T14:42:25.603369+00:00,prediction_generated,217,risk_score=0.3000; risk_tier=Low,Analyst
+2026-05-31T14:42:25.629700+00:00,prediction_generated,218,risk_score=0.0800; risk_tier=Low,Analyst
+2026-05-31T14:42:25.655214+00:00,prediction_generated,219,risk_score=0.1550; risk_tier=Low,Analyst
+2026-05-31T14:42:25.684513+00:00,prediction_generated,220,risk_score=0.3150; risk_tier=Low,Analyst
+2026-05-31T14:42:25.716783+00:00,prediction_generated,221,risk_score=0.2500; risk_tier=Low,Analyst
+2026-05-31T14:42:25.740178+00:00,prediction_generated,222,risk_score=0.2000; risk_tier=Low,Analyst
+2026-05-31T14:42:25.761477+00:00,prediction_generated,223,risk_score=0.2050; risk_tier=Low,Analyst
+2026-05-31T14:42:25.786131+00:00,prediction_generated,224,risk_score=0.2000; risk_tier=Low,Analyst
+2026-05-31T14:42:25.812871+00:00,prediction_generated,225,risk_score=0.2400; risk_tier=Low,Analyst
+2026-05-31T14:42:25.836999+00:00,prediction_generated,226,risk_score=0.1150; risk_tier=Low,Analyst
+2026-05-31T14:42:25.860948+00:00,prediction_generated,227,risk_score=0.2600; risk_tier=Low,Analyst
+2026-05-31T14:42:25.886720+00:00,prediction_generated,228,risk_score=0.4900; risk_tier=Low,Analyst
+2026-05-31T14:42:25.913270+00:00,prediction_generated,229,risk_score=0.5250; risk_tier=Medium,Analyst
+2026-05-31T14:42:25.940020+00:00,prediction_generated,230,risk_score=0.1650; risk_tier=Low,Analyst
+2026-05-31T14:42:25.964857+00:00,prediction_generated,231,risk_score=0.2950; risk_tier=Low,Analyst
+2026-05-31T14:42:25.995356+00:00,prediction_generated,232,risk_score=0.5800; risk_tier=Medium,Analyst
+2026-05-31T14:42:26.020722+00:00,prediction_generated,233,risk_score=0.6200; risk_tier=Medium,Analyst
+2026-05-31T14:42:26.045400+00:00,prediction_generated,234,risk_score=0.2700; risk_tier=Low,Analyst
+2026-05-31T14:42:26.068792+00:00,prediction_generated,235,risk_score=0.1700; risk_tier=Low,Analyst
+2026-05-31T14:42:26.092883+00:00,prediction_generated,236,risk_score=0.5200; risk_tier=Medium,Analyst
+2026-05-31T14:42:26.116839+00:00,prediction_generated,237,risk_score=0.2450; risk_tier=Low,Analyst
+2026-05-31T14:42:26.140811+00:00,prediction_generated,238,risk_score=0.3100; risk_tier=Low,Analyst
+2026-05-31T14:42:26.162190+00:00,prediction_generated,239,risk_score=0.5750; risk_tier=Medium,Analyst
+2026-05-31T14:42:26.187424+00:00,prediction_generated,240,risk_score=0.1150; risk_tier=Low,Analyst
+2026-05-31T14:42:26.213504+00:00,prediction_generated,241,risk_score=0.1600; risk_tier=Low,Analyst
+2026-05-31T14:42:26.236708+00:00,prediction_generated,242,risk_score=0.1900; risk_tier=Low,Analyst
+2026-05-31T14:42:26.263521+00:00,prediction_generated,243,risk_score=0.1100; risk_tier=Low,Analyst
+2026-05-31T14:42:26.290424+00:00,prediction_generated,244,risk_score=0.1000; risk_tier=Low,Analyst
+2026-05-31T14:42:26.313604+00:00,prediction_generated,245,risk_score=0.2000; risk_tier=Low,Analyst
+2026-05-31T14:42:26.338269+00:00,prediction_generated,246,risk_score=0.2050; risk_tier=Low,Analyst
+2026-05-31T14:42:26.364228+00:00,prediction_generated,247,risk_score=0.1400; risk_tier=Low,Analyst
+2026-05-31T14:42:26.397323+00:00,prediction_generated,248,risk_score=0.3750; risk_tier=Low,Analyst
+2026-05-31T14:42:26.431317+00:00,prediction_generated,249,risk_score=0.3300; risk_tier=Low,Analyst
+2026-05-31T14:42:26.459767+00:00,prediction_generated,250,risk_score=0.1550; risk_tier=Low,Analyst
+2026-05-31T14:42:26.486164+00:00,prediction_generated,251,risk_score=0.0800; risk_tier=Low,Analyst
+2026-05-31T14:42:26.514115+00:00,prediction_generated,252,risk_score=0.2250; risk_tier=Low,Analyst
+2026-05-31T14:42:26.537567+00:00,prediction_generated,253,risk_score=0.1600; risk_tier=Low,Analyst
+2026-05-31T14:42:26.564288+00:00,prediction_generated,254,risk_score=0.2900; risk_tier=Low,Analyst
+2026-05-31T14:42:26.592407+00:00,prediction_generated,255,risk_score=0.5350; risk_tier=Medium,Analyst
+2026-05-31T14:42:26.621839+00:00,prediction_generated,256,risk_score=0.1300; risk_tier=Low,Analyst
+2026-05-31T14:42:26.646118+00:00,prediction_generated,257,risk_score=0.1450; risk_tier=Low,Analyst
+2026-05-31T14:42:26.673064+00:00,prediction_generated,258,risk_score=0.2200; risk_tier=Low,Analyst
+2026-05-31T14:42:26.698856+00:00,prediction_generated,259,risk_score=0.1600; risk_tier=Low,Analyst
+2026-05-31T14:42:26.724178+00:00,prediction_generated,260,risk_score=0.2000; risk_tier=Low,Analyst
+2026-05-31T14:42:26.749742+00:00,prediction_generated,261,risk_score=0.2200; risk_tier=Low,Analyst
+2026-05-31T14:42:26.775180+00:00,prediction_generated,262,risk_score=0.1900; risk_tier=Low,Analyst
+2026-05-31T14:42:26.803494+00:00,prediction_generated,263,risk_score=0.1450; risk_tier=Low,Analyst
+2026-05-31T14:42:26.829962+00:00,prediction_generated,264,risk_score=0.1500; risk_tier=Low,Analyst
+2026-05-31T14:42:26.858667+00:00,prediction_generated,265,risk_score=0.1850; risk_tier=Low,Analyst
+2026-05-31T14:42:26.887074+00:00,prediction_generated,266,risk_score=0.3150; risk_tier=Low,Analyst
+2026-05-31T14:42:26.915667+00:00,prediction_generated,267,risk_score=0.1150; risk_tier=Low,Analyst
+2026-05-31T14:42:26.942723+00:00,prediction_generated,268,risk_score=0.2250; risk_tier=Low,Analyst
+2026-05-31T14:42:26.967879+00:00,prediction_generated,269,risk_score=0.2250; risk_tier=Low,Analyst
+2026-05-31T14:42:26.999455+00:00,prediction_generated,270,risk_score=0.1100; risk_tier=Low,Analyst
+2026-05-31T14:42:27.031799+00:00,prediction_generated,271,risk_score=0.2650; risk_tier=Low,Analyst
+2026-05-31T14:42:27.059191+00:00,prediction_generated,272,risk_score=0.2150; risk_tier=Low,Analyst
+2026-05-31T14:42:27.088547+00:00,prediction_generated,273,risk_score=0.2350; risk_tier=Low,Analyst
+2026-05-31T14:42:27.110541+00:00,prediction_generated,274,risk_score=0.2550; risk_tier=Low,Analyst
+2026-05-31T14:42:27.134456+00:00,prediction_generated,275,risk_score=0.3550; risk_tier=Low,Analyst
+2026-05-31T14:42:27.159789+00:00,prediction_generated,276,risk_score=0.1600; risk_tier=Low,Analyst
+2026-05-31T14:42:27.182611+00:00,prediction_generated,277,risk_score=0.2250; risk_tier=Low,Analyst
+2026-05-31T14:42:27.206677+00:00,prediction_generated,278,risk_score=0.1500; risk_tier=Low,Analyst
+2026-05-31T14:42:27.230145+00:00,prediction_generated,279,risk_score=0.5700; risk_tier=Medium,Analyst
+2026-05-31T14:42:27.255156+00:00,prediction_generated,280,risk_score=0.2800; risk_tier=Low,Analyst
+2026-05-31T14:42:27.280072+00:00,prediction_generated,281,risk_score=0.2050; risk_tier=Low,Analyst
+2026-05-31T14:42:27.302141+00:00,prediction_generated,282,risk_score=0.1250; risk_tier=Low,Analyst
+2026-05-31T14:42:27.327506+00:00,prediction_generated,283,risk_score=0.1650; risk_tier=Low,Analyst
+2026-05-31T14:42:27.350558+00:00,prediction_generated,284,risk_score=0.1100; risk_tier=Low,Analyst
+2026-05-31T14:42:27.376414+00:00,prediction_generated,285,risk_score=0.1500; risk_tier=Low,Analyst
+2026-05-31T14:42:27.399903+00:00,prediction_generated,286,risk_score=0.1700; risk_tier=Low,Analyst
+2026-05-31T14:42:27.424632+00:00,prediction_generated,287,risk_score=0.2550; risk_tier=Low,Analyst
+2026-05-31T14:42:27.450167+00:00,prediction_generated,288,risk_score=0.1850; risk_tier=Low,Analyst
+2026-05-31T14:42:27.475633+00:00,prediction_generated,289,risk_score=0.2550; risk_tier=Low,Analyst
+2026-05-31T14:42:27.505345+00:00,prediction_generated,290,risk_score=0.2750; risk_tier=Low,Analyst
+2026-05-31T14:42:27.530210+00:00,prediction_generated,291,risk_score=0.1300; risk_tier=Low,Analyst
+2026-05-31T14:42:27.557062+00:00,prediction_generated,292,risk_score=0.2550; risk_tier=Low,Analyst
+2026-05-31T14:42:27.583448+00:00,prediction_generated,293,risk_score=0.2400; risk_tier=Low,Analyst
+2026-05-31T14:42:27.614357+00:00,prediction_generated,294,risk_score=0.1400; risk_tier=Low,Analyst
+2026-05-31T14:42:27.647793+00:00,prediction_generated,295,risk_score=0.2950; risk_tier=Low,Analyst
+2026-05-31T14:42:27.682866+00:00,prediction_generated,296,risk_score=0.2400; risk_tier=Low,Analyst
+2026-05-31T14:42:27.711335+00:00,prediction_generated,297,risk_score=0.2000; risk_tier=Low,Analyst
+2026-05-31T14:42:27.743519+00:00,prediction_generated,298,risk_score=0.2400; risk_tier=Low,Analyst
+2026-05-31T14:42:27.775537+00:00,prediction_generated,299,risk_score=0.1150; risk_tier=Low,Analyst
+2026-05-31T14:42:35.358836+00:00,alert_escalated,118,case_id=CDD-268AAE8F; risk_tier=Medium,Analyst
+2026-05-31T14:42:47.211651+00:00,case_escalated_to_str,118,case_id=CDD-268AAE8F; cdd_level=Enhanced,Analyst
+2026-05-31T14:43:24.381246+00:00,str_submitted_l1,118,str_id=STR-2096D138,Analyst
+2026-05-31T14:43:30.466707+00:00,str_approved_l1,118,str_id=STR-2096D138,Analyst
+2026-05-31T14:52:17.243657+00:00,str_submitted_l1,118,str_id=STR-2096D138,Analyst
+2026-05-31T14:52:20.770002+00:00,str_approved_l1,118,str_id=STR-2096D138,Analyst
+2026-05-31T14:52:35.768104+00:00,str_rejected_l2,118,str_id=STR-2096D138; reason=not sus,Analyst
+2026-05-31T15:05:23.736467+00:00,str_submitted_l1,118,str_id=STR-2096D138,Analyst
+2026-05-31T15:05:28.118322+00:00,str_approved_l1,118,str_id=STR-2096D138,Analyst
+2026-05-31T15:07:42.438224+00:00,str_archived,118,reference_number=nan,John.Doe

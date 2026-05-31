@@ -28,6 +28,7 @@ KYC_COLUMNS = [
     "IsPEP",           # "Yes" / "No" / ""
     "FlaggedBy",       # analyst id who last set Critical
     "FlaggedReason",   # FLAG_REASON_* constant
+    "RiskIndicators",  # semicolon-separated list of selected risk indicators
     "SMApprovalStatus",# SM_APPROVAL_* constant
     "SMApprovedBy",    # SM actor id
     "SMApprovedAt",    # ISO timestamp
@@ -246,6 +247,7 @@ def enrol_customer(
         "IsPEP": "",
         "FlaggedBy": "",
         "FlaggedReason": "",
+        "RiskIndicators": "",
         "SMApprovalStatus": "",
         "SMApprovedBy": "",
         "SMApprovedAt": "",
