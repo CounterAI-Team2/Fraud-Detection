@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 # --- Actor defaults ---
-DEFAULT_ACTOR_ID   = "Analyst"
+DEFAULT_ACTOR_ID   = "John.Doe"
 DEFAULT_ACTOR_ROLE = "Admin"
 ANALYST_ROLES      = ["Admin", "Analyst", "Compliance Officer", "Senior Management"]
 
