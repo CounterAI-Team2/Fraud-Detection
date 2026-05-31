@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from utils.constants import ALERT_STATUS_NEW, CASE_OPEN_STATUSES, STR_STATUS_DRAFT, STR_STATUS_L1, STR_STATUS_L2
+from utils.constants import ALERT_STATUS_NEW, CASE_OPEN_STATUSES, DEFAULT_ACTOR_ID, DEFAULT_ACTOR_ROLE, STR_STATUS_DRAFT, STR_STATUS_L1, STR_STATUS_L2
 from utils.data_store import ensure_reference_data, get_cases, get_str_cases
 from utils.kyc_store import ensure_kyc_database, get_kyc_customers
 from utils.mas_sanctions_sync import sync_mas_sanctions
@@ -26,7 +26,7 @@ st.caption("Anti-money-laundering detection and reporting — pre-trained RF mod
 _DEFAULTS = {
     "scored_df": None, "alert_status": {}, "selected_txn_id": None,
     "str_case": None,  "str_log": [],     "selected_case_id": None,
-    "current_actor_id": "Analyst", "current_actor_role": "Admin",
+    "current_actor_id": DEFAULT_ACTOR_ID, "current_actor_role": DEFAULT_ACTOR_ROLE,
     "current_str_id": None, "selected_str_record": None,
 }
 for _k, _v in _DEFAULTS.items():
