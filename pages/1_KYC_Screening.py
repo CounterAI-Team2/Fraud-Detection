@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import html
 import time
 from pathlib import Path
 
@@ -64,15 +63,6 @@ st.caption("Enrol and manage customers, screen against sanctions lists, upload t
 st.markdown(
     """
     <style>
-    .kyc-ellipsis {
-        display: block;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 100%;
-        font-size: 13px;
-    }
-    .kyc-id { font-size: 11px; color: #888; }
     .kyc-risk-badge {
         display: inline-block;
         white-space: nowrap;
@@ -82,10 +72,46 @@ st.markdown(
         font-weight: 700;
         line-height: 1.4;
     }
-    /* Prevent Streamlit column flex from crushing table cells */
-    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-        min-width: 2.5rem !important;
+  .kyc-table-head {
+        display: grid;
+        grid-template-columns: minmax(180px, 2.4fr) minmax(100px, 1.4fr) 52px 72px 88px 72px;
+        gap: 12px;
+        padding: 8px 14px 10px 14px;
+        font-size: 11px;
+        font-weight: 700;
+        color: #666;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        border-bottom: 1px solid #2a2d3a;
+        margin-bottom: 6px;
     }
+    /* Full-width row buttons in the customer database panel only */
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(.kyc-table-head) button[kind="secondary"] {
+        text-align: left !important;
+        justify-content: flex-start !important;
+        width: 100% !important;
+        min-height: 54px !important;
+        height: auto !important;
+        padding: 10px 14px !important;
+        margin: 0 0 6px 0 !important;
+        background: rgba(255, 255, 255, 0.03) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 8px !important;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(.kyc-table-head) button[kind="secondary"]:hover {
+        background: rgba(77, 166, 255, 0.14) !important;
+        border-color: rgba(77, 166, 255, 0.45) !important;
+        cursor: pointer;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(.kyc-table-head) button[kind="secondary"] p {
+        text-align: left !important;
+        white-space: pre-wrap !important;
+        font-size: 13px !important;
+        line-height: 1.45 !important;
+        margin: 0 !important;
+    }
+    .kyc-row-name { font-weight: 600; color: #eee; }
+    .kyc-row-meta { font-size: 12px; color: #999; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -113,18 +139,26 @@ def _sanctions_badge(status: str) -> str:
         return _badge("Pending", "background:rgba(77,166,255,0.15);color:#4da6ff")
     return f"<span style='color:#555'>—</span>"
 
-def _ellipsis(text: str, max_len: int = 32) -> str:
-    raw = str(text or "").strip() or "—"
-    shown = raw if len(raw) <= max_len else raw[: max_len - 1] + "…"
-    return (
-        f"<span class='kyc-ellipsis' title='{html.escape(raw)}'>"
-        f"{html.escape(shown)}</span>"
-    )
-
-
 def _detail_line(label: str, value: str) -> None:
     display = str(value or "").strip() or "—"
     st.markdown(f"**{label}**  \n{display}")
+
+
+def _set_view_customer(customer_id: str) -> None:
+    st.session_state["kyc_view_customer_id"] = str(customer_id)
+
+
+def _customer_row_button_label(row: pd.Series) -> str:
+    """Plain-text label for a full-width row button (name line + metadata line)."""
+    _name = str(row.get("FullName", ""))
+    _cid = str(row.get("id", ""))
+    _acct = str(row.get("AccountNo", ""))
+    _ctype = "Corp" if str(row.get("customer_type", "")) == CUSTOMER_TYPE_CORPORATE else "Ind"
+    _risk = str(row.get("RiskStatus", "Low"))
+    _cdd = str(row.get("CDDLevel", "—")) or "—"
+    _sanc = str(row.get("SanctionsReview", ""))
+    _sanc_d = "Pending" if _sanc == SANCTIONS_REVIEW_PENDING else "—"
+    return f"{_name}\n{_cid}   ·   {_acct}   ·   {_ctype}   ·   {_risk}   ·   {_cdd}   ·   {_sanc_d}"
 
 
 def _complete_enrolment(pending: dict) -> None:
@@ -500,8 +534,7 @@ def _customer_detail_dialog(customer_id: str) -> None:
             st.error("Update failed.")
 
     if st.button("Close", key=f"detail_close_{customer_id}"):
-        st.session_state.pop("kyc_last_opened_id", None)
-        st.session_state["kyc_table_rev"] = int(st.session_state.get("kyc_table_rev", 0)) + 1
+        st.session_state.pop("kyc_view_customer_id", None)
         st.rerun()
 
 
@@ -612,58 +645,41 @@ with _tab_registry:
                 | _view["Nationality"].astype(str).str.lower().str.contains(_needle, na=False)
             ]
 
-        st.caption("Click any row to open the full KYC profile.")
+        st.caption("Click anywhere on a row to open the full KYC profile.")
 
         if _view.empty:
             st.info("No customers match your search.")
         else:
-            _view = _view.reset_index(drop=True)
-            _table = pd.DataFrame({
-                "Name": _view["FullName"].astype(str),
-                "Customer ID": _view["id"].astype(str),
-                "Account": _view["AccountNo"].astype(str),
-                "Type": _view["customer_type"].astype(str).map(
-                    lambda t: "Corporate" if t == CUSTOMER_TYPE_CORPORATE else "Individual"
-                ),
-                "Risk": _view["RiskStatus"].astype(str),
-                "CDD": _view["CDDLevel"].astype(str),
-                "Sanctions": _view["SanctionsReview"].astype(str).map(
-                    lambda s: "Pending" if s == SANCTIONS_REVIEW_PENDING else ("—" if not str(s).strip() else s)
-                ),
-            })
-
-            _table_key = f"kyc_customer_registry_{int(st.session_state.get('kyc_table_rev', 0))}"
-            _pick = st.dataframe(
-                _table,
-                use_container_width=True,
-                hide_index=True,
-                on_select="rerun",
-                selection_mode="single-row",
-                key=_table_key,
-                column_config={
-                    "Name": st.column_config.TextColumn("Name", width="large"),
-                    "Customer ID": st.column_config.TextColumn("Customer ID", width="medium"),
-                    "Account": st.column_config.TextColumn("Account", width="medium"),
-                    "Type": st.column_config.TextColumn("Type", width="small"),
-                    "Risk": st.column_config.TextColumn("Risk", width="small"),
-                    "CDD": st.column_config.TextColumn("CDD", width="small"),
-                    "Sanctions": st.column_config.TextColumn("Sanctions", width="small"),
-                },
+            st.markdown(
+                """
+                <div class="kyc-table-head">
+                    <span>Name / ID</span>
+                    <span>Account</span>
+                    <span>Type</span>
+                    <span>Risk</span>
+                    <span>CDD</span>
+                    <span>Sanc.</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
-            _selected_rows: list[int] = []
-            if _pick is not None and getattr(_pick, "selection", None) is not None:
-                _selected_rows = list(getattr(_pick.selection, "rows", []) or [])
-
-            if _selected_rows:
-                _sel_idx = int(_selected_rows[0])
-                _cid = str(_view.iloc[_sel_idx]["id"])
-                if st.session_state.get("kyc_last_opened_id") != _cid:
-                    st.session_state["kyc_last_opened_id"] = _cid
-                    _customer_detail_dialog(_cid)
+            for _, _row in _view.iterrows():
+                _cid = str(_row["id"])
+                st.button(
+                    _customer_row_button_label(_row),
+                    key=f"kyc_open_{_cid}",
+                    use_container_width=True,
+                    type="secondary",
+                    on_click=_set_view_customer,
+                    args=(_cid,),
+                )
 
             if _search.strip():
                 st.caption(f"Showing {len(_view)} of {len(customers)} customers")
+
+    if st.session_state.get("kyc_view_customer_id"):
+        _customer_detail_dialog(st.session_state["kyc_view_customer_id"])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
