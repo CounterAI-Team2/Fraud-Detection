@@ -20,6 +20,8 @@ from utils.data_store import get_model_registry
 from utils.feature_engineering import (
     CATEGORICAL_FEATURES,
     ENGINEERED_FEATURES,
+    RED_FLAG_COLS,
+    apply_risk_tier,
     SAML_REQUIRED_COLUMNS,
     engineer_features,
     prepare_model_matrix,
@@ -478,6 +480,7 @@ with _tab_scoring:
                 _feat["rf_prediction"]            = _pred
                 _feat["risk_score"]               = _risk_prob
                 _feat["risk_threshold"]           = _threshold
+                _feat = apply_risk_tier(_feat)
                 _feat["prediction_wrong"]         = ""
                 _feat["prediction_feedback_reason"] = ""
                 _feat = ensure_scored_defaults(_feat)
@@ -550,6 +553,10 @@ with _tab_scoring:
                     f" &nbsp;·&nbsp; Model: {_model_label}"
                     f" &nbsp;·&nbsp; Threshold: {_meta.get('threshold', _threshold)}"
                 )
+                st.caption(
+                    "MAS red-flag features active: "
+                    + ", ".join(RED_FLAG_COLS)
+                )
 
                 # Summary metrics
                 _sm1, _sm2, _sm3, _sm4 = st.columns(4)
@@ -570,7 +577,7 @@ with _tab_scoring:
                 st.markdown("**Risk Tier Breakdown**")
                 _tier_counts = _meta.get("tier_counts", _feat_display["risk_tier"].value_counts().to_dict())
                 _max_count   = max(_tier_counts.values(), default=1) or 1
-                _tier_colors = {"Critical": "#f44336", "High": "#fb8c00", "Medium": "#fdd835", "Low": "#64dd17"}
+                _tier_colors = {"High": "#f44336", "Medium": "#fb8c00", "Low": "#64dd17"}
                 _bars_html   = ""
                 for _tier, _color in _tier_colors.items():
                     _cnt = _tier_counts.get(_tier, 0)

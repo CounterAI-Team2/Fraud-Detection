@@ -33,21 +33,24 @@ view["_status"] = view["transaction_id"].map(lambda x: status_map.get(x, {}).get
 
 _threshold = float(scored_df["risk_threshold"].iloc[0]) if "risk_threshold" in scored_df.columns else 0.5
 _total_alerts = int((view["_status"] != ALERT_STATUS_DISMISSED).sum())
+_high_count = int((scored_df["risk_tier"] == "High").sum())
+_med_count = int((scored_df["risk_tier"] == "Medium").sum())
+_low_count = int((scored_df["risk_tier"] == "Low").sum())
 
 # ── Status info bar ───────────────────────────────────────────────────────────
 with st.container(border=True):
     _ib1, _ib2, _ib3, _ib4 = st.columns(4)
-    _ib1.markdown(f"Scored dataset: **{len(scored_df):,} rows**")
-    _ib2.markdown(f"Threshold: **{_threshold}**")
-    _ib3.markdown(f"Showing: **{_total_alerts} alerts**")
-    _ib4.markdown(f"Analyst: **{analyst_id}**")
+    _ib1.markdown(f"Total Flagged: **{int((scored_df['rf_prediction'] == 1).sum()):,}**")
+    _ib2.markdown(f"🔴 High: **{_high_count:,}**")
+    _ib3.markdown(f"🟠 Medium: **{_med_count:,}**")
+    _ib4.markdown(f"🟢 Low: **{_low_count:,}**")
 
 # ── Filters ───────────────────────────────────────────────────────────────────
 with st.container(border=True):
     _fc1, _fc2, _fc3, _fc4 = st.columns(4)
     _tiers = _fc1.multiselect(
-        "Risk Tier", ["Critical", "High", "Medium", "Low"],
-        default=["Critical", "High", "Medium"],
+        "Risk Tier", ["High", "Medium", "Low"],
+        default=["High", "Medium", "Low"],
     )
     _payment_types = sorted(view["Payment_type"].astype(str).unique().tolist())
     _sel_pt = _fc2.multiselect("Payment Type", _payment_types, default=_payment_types)
@@ -74,7 +77,7 @@ if _sel_statuses:
     view = view[view["_status"].isin(_sel_statuses)]
 
 # Sort: dismissed to bottom, then by tier + score
-_priority = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
+_priority = {"High": 0, "Medium": 1, "Low": 2}
 _status_rank = {ALERT_STATUS_DISMISSED: 1, ALERT_STATUS_NEW: 0, ALERT_STATUS_ESCALATED: 0}
 view["_prio"]        = view["risk_tier"].map(_priority).fillna(99)
 view["_status_rank"] = view["_status"].map(_status_rank).fillna(0)
@@ -102,9 +105,8 @@ def _reason_text(row: pd.Series) -> str:
 
 
 _TIER_BORDER = {
-    "Critical": "#f44336",
-    "High":     "#fb8c00",
-    "Medium":   "#fdd835",
+    "High":     "#f44336",
+    "Medium":   "#fb8c00",
     "Low":      "#64dd17",
 }
 

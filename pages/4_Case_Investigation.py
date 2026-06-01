@@ -143,6 +143,67 @@ with _left:
         _cdd_val = kyc_row["CDDLevel"] if kyc_row else "—"
         _row("CDD Level", _cdd_val)
 
+    # MAS red-flag evidence panel
+    with st.container(border=True):
+        st.markdown("**🚩 MAS Red Flags**")
+        _flag_defs = {
+            "smurfing_flag": (
+                "🔴 Smurfing / Structuring Detected",
+                "MAS Notice 626 para 6.4",
+            ),
+            "uturn_flag": (
+                "🔴 U-Turn Transaction",
+                "MAS Appendix B-11(viii)",
+            ),
+            "rapid_movement_flag": (
+                "🟠 Rapid Fund Movement",
+                "MAS Appendix B-11(iii)",
+            ),
+            "dormant_spike_flag": (
+                "🟠 Dormant Account Spike",
+                "MAS Appendix B-11(iv)",
+            ),
+            "high_risk_jurisdiction": (
+                "🔴 High-Risk Jurisdiction",
+                "MAS Notice 626 para 8.6(a)/(b)",
+            ),
+            "profile_inconsistency_flag": (
+                "🟠 Profile Inconsistency",
+                "MAS Appendix B-11(i)/(v)",
+            ),
+            "cdd_threshold_breach": (
+                "🟡 CDD Threshold Breach",
+                "MAS Notice 626 para 6.3(b)",
+            ),
+            "cross_currency": (
+                "🟡 Currency Mismatch",
+                "MAS Notice 626 para 4.1(d)",
+            ),
+            "cross_border": (
+                "🟡 Cross-Border Transfer",
+                "MAS Notice 626 para 4.1(b)",
+            ),
+            "is_off_hours": (
+                "🟡 Off-Hours Transaction",
+                "MAS Notice 626 para 4.1(d)",
+            ),
+        }
+        _active_flags = [
+            (label, basis)
+            for _col, (label, basis) in _flag_defs.items()
+            if int(selected_txn.get(_col, 0)) == 1
+        ]
+        if _active_flags:
+            for _label, _basis in _active_flags:
+                st.markdown(f"- **{_label}**")
+                st.caption(_basis)
+            st.markdown(
+                f"**Red Flag Score:** {int(selected_txn.get('red_flag_score', 0))} / 10  "
+                f"| **Risk Tier:** {tier}"
+            )
+        else:
+            st.success("No MAS red flags detected for this transaction.")
+
     # Case Actions
     with st.container(border=True):
         st.markdown("**Case Actions**")

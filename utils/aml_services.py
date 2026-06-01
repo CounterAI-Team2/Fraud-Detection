@@ -62,7 +62,8 @@ def ensure_scored_defaults(scored_df: pd.DataFrame) -> pd.DataFrame:
     df["risk_score"] = df["risk_score"].clip(0, 1)
     if "rf_prediction" not in df.columns:
         df["rf_prediction"] = (df["risk_score"] >= ALERT_THRESHOLDS["Medium"]).astype(int)
-    df["risk_tier"] = df["risk_score"].apply(score_to_tier)
+    if "risk_tier" not in df.columns:
+        df["risk_tier"] = df["risk_score"].apply(score_to_tier)
     df["customer_id"] = df["Sender_account"].astype(str).apply(make_customer_id)
     df["amount_value"] = pd.to_numeric(df["Amount"], errors="coerce").fillna(0.0)
     df["is_high_value"] = df["amount_value"] >= HIGH_VALUE_THRESHOLD
