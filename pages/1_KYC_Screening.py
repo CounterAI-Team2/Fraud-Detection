@@ -73,7 +73,20 @@ st.markdown(
         font-size: 13px;
     }
     .kyc-id { font-size: 11px; color: #888; }
-  </style>
+    .kyc-risk-badge {
+        display: inline-block;
+        white-space: nowrap;
+        padding: 2px 10px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.4;
+    }
+    /* Prevent Streamlit column flex from crushing table cells */
+    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+        min-width: 2.5rem !important;
+    }
+    </style>
     """,
     unsafe_allow_html=True,
 )
@@ -83,8 +96,7 @@ st.markdown(
 
 def _badge(text: str, style: str) -> str:
     return (
-        f"<span style='display:inline-block;padding:2px 10px;border-radius:20px;"
-        f"font-size:11px;font-weight:700;{style}'>{text}</span>"
+        f"<span class='kyc-risk-badge' style='{style}'>{text}</span>"
     )
 
 def _risk_badge(risk: str) -> str:
@@ -488,6 +500,8 @@ def _customer_detail_dialog(customer_id: str) -> None:
             st.error("Update failed.")
 
     if st.button("Close", key=f"detail_close_{customer_id}"):
+        st.session_state.pop("kyc_last_opened_id", None)
+        st.session_state["kyc_table_rev"] = int(st.session_state.get("kyc_table_rev", 0)) + 1
         st.rerun()
 
 
@@ -598,53 +612,55 @@ with _tab_registry:
                 | _view["Nationality"].astype(str).str.lower().str.contains(_needle, na=False)
             ]
 
-        _widths = [2.4, 1.4, 0.85, 0.75, 0.75, 0.95, 0.65]
-        _headers = ["NAME / ID", "ACCOUNT", "TYPE", "RISK", "CDD", "SANCTIONS", ""]
-        _hc = st.columns(_widths)
-        for _hcol, _hlabel in zip(_hc, _headers):
-            _hcol.markdown(
-                f"<span style='font-size:11px;font-weight:700;color:#555;"
-                f"text-transform:uppercase;letter-spacing:0.8px'>{_hlabel}</span>",
-                unsafe_allow_html=True,
-            )
-        st.markdown("<hr style='border-color:#1e2130;margin:4px 0 8px 0'>", unsafe_allow_html=True)
+        st.caption("Click any row to open the full KYC profile.")
 
         if _view.empty:
             st.info("No customers match your search.")
         else:
-            for _, _row in _view.iterrows():
-                _cid = str(_row["id"])
-                _risk = str(_row.get("RiskStatus", "Low"))
-                _sanc = str(_row.get("SanctionsReview", ""))
-                _ctype_short = "Corp" if str(_row.get("customer_type", "")) == CUSTOMER_TYPE_CORPORATE else "Ind."
+            _view = _view.reset_index(drop=True)
+            _table = pd.DataFrame({
+                "Name": _view["FullName"].astype(str),
+                "Customer ID": _view["id"].astype(str),
+                "Account": _view["AccountNo"].astype(str),
+                "Type": _view["customer_type"].astype(str).map(
+                    lambda t: "Corporate" if t == CUSTOMER_TYPE_CORPORATE else "Individual"
+                ),
+                "Risk": _view["RiskStatus"].astype(str),
+                "CDD": _view["CDDLevel"].astype(str),
+                "Sanctions": _view["SanctionsReview"].astype(str).map(
+                    lambda s: "Pending" if s == SANCTIONS_REVIEW_PENDING else ("—" if not str(s).strip() else s)
+                ),
+            })
 
-                _rc = st.columns(_widths)
-                _rc[0].markdown(
-                    f"<div class='kyc-ellipsis' title='{html.escape(str(_row['FullName']))}'>"
-                    f"<strong>{html.escape(str(_row['FullName']))}</strong></div>"
-                    f"<div class='kyc-id kyc-ellipsis'>{html.escape(_cid)}</div>",
-                    unsafe_allow_html=True,
-                )
-                _rc[1].markdown(_ellipsis(_row.get("AccountNo", "")), unsafe_allow_html=True)
-                _rc[2].markdown(
-                    f"<span style='font-size:12px;color:#aaa'>{_ctype_short}</span>",
-                    unsafe_allow_html=True,
-                )
-                _rc[3].markdown(_risk_badge(_risk), unsafe_allow_html=True)
-                _rc[4].markdown(
-                    f"<span style='font-size:12px;color:#aaa;white-space:nowrap'>"
-                    f"{html.escape(str(_row.get('CDDLevel', '—')))}</span>",
-                    unsafe_allow_html=True,
-                )
-                _rc[5].markdown(
-                    _sanctions_badge(_sanc) if _sanc == SANCTIONS_REVIEW_PENDING
-                    else "<span style='color:#555;font-size:12px'>—</span>",
-                    unsafe_allow_html=True,
-                )
-                if _rc[6].button("View", key=f"view_{_cid}", use_container_width=True):
+            _table_key = f"kyc_customer_registry_{int(st.session_state.get('kyc_table_rev', 0))}"
+            _pick = st.dataframe(
+                _table,
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                key=_table_key,
+                column_config={
+                    "Name": st.column_config.TextColumn("Name", width="large"),
+                    "Customer ID": st.column_config.TextColumn("Customer ID", width="medium"),
+                    "Account": st.column_config.TextColumn("Account", width="medium"),
+                    "Type": st.column_config.TextColumn("Type", width="small"),
+                    "Risk": st.column_config.TextColumn("Risk", width="small"),
+                    "CDD": st.column_config.TextColumn("CDD", width="small"),
+                    "Sanctions": st.column_config.TextColumn("Sanctions", width="small"),
+                },
+            )
+
+            _selected_rows: list[int] = []
+            if _pick is not None and getattr(_pick, "selection", None) is not None:
+                _selected_rows = list(getattr(_pick.selection, "rows", []) or [])
+
+            if _selected_rows:
+                _sel_idx = int(_selected_rows[0])
+                _cid = str(_view.iloc[_sel_idx]["id"])
+                if st.session_state.get("kyc_last_opened_id") != _cid:
+                    st.session_state["kyc_last_opened_id"] = _cid
                     _customer_detail_dialog(_cid)
-
-                st.markdown("<hr style='border-color:#1e2130;margin:2px 0'>", unsafe_allow_html=True)
 
             if _search.strip():
                 st.caption(f"Showing {len(_view)} of {len(customers)} customers")
