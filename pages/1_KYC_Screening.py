@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import html as html_lib
 import time
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 from utils.audit_logger import log_action
 from utils.sidebar import render_sidebar
@@ -72,46 +74,6 @@ st.markdown(
         font-weight: 700;
         line-height: 1.4;
     }
-  .kyc-table-head {
-        display: grid;
-        grid-template-columns: minmax(180px, 2.4fr) minmax(100px, 1.4fr) 52px 72px 88px 72px;
-        gap: 12px;
-        padding: 8px 14px 10px 14px;
-        font-size: 11px;
-        font-weight: 700;
-        color: #666;
-        text-transform: uppercase;
-        letter-spacing: 0.8px;
-        border-bottom: 1px solid #2a2d3a;
-        margin-bottom: 6px;
-    }
-    /* Full-width row buttons in the customer database panel only */
-    div[data-testid="stVerticalBlockBorderWrapper"]:has(.kyc-table-head) button[kind="secondary"] {
-        text-align: left !important;
-        justify-content: flex-start !important;
-        width: 100% !important;
-        min-height: 54px !important;
-        height: auto !important;
-        padding: 10px 14px !important;
-        margin: 0 0 6px 0 !important;
-        background: rgba(255, 255, 255, 0.03) !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        border-radius: 8px !important;
-    }
-    div[data-testid="stVerticalBlockBorderWrapper"]:has(.kyc-table-head) button[kind="secondary"]:hover {
-        background: rgba(77, 166, 255, 0.14) !important;
-        border-color: rgba(77, 166, 255, 0.45) !important;
-        cursor: pointer;
-    }
-    div[data-testid="stVerticalBlockBorderWrapper"]:has(.kyc-table-head) button[kind="secondary"] p {
-        text-align: left !important;
-        white-space: pre-wrap !important;
-        font-size: 13px !important;
-        line-height: 1.45 !important;
-        margin: 0 !important;
-    }
-    .kyc-row-name { font-weight: 600; color: #eee; }
-    .kyc-row-meta { font-size: 12px; color: #999; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -144,21 +106,160 @@ def _detail_line(label: str, value: str) -> None:
     st.markdown(f"**{label}**  \n{display}")
 
 
-def _set_view_customer(customer_id: str) -> None:
-    st.session_state["kyc_view_customer_id"] = str(customer_id)
+def _risk_badge_html(risk: str) -> str:
+    styles = {
+        "Critical": "background:rgba(244,67,54,0.15);color:#f44336",
+        "High": "background:rgba(251,140,0,0.15);color:#fb8c00",
+        "Medium": "background:rgba(253,216,53,0.15);color:#fdd835",
+        "Low": "background:rgba(100,221,23,0.15);color:#64dd17",
+    }
+    style = styles.get(risk, "background:#2a2a2a;color:#888")
+    return f"<span class='kyc-risk-badge' style='{style}'>{html_lib.escape(risk)}</span>"
 
 
-def _customer_row_button_label(row: pd.Series) -> str:
-    """Plain-text label for a full-width row button (name line + metadata line)."""
-    _name = str(row.get("FullName", ""))
-    _cid = str(row.get("id", ""))
-    _acct = str(row.get("AccountNo", ""))
-    _ctype = "Corp" if str(row.get("customer_type", "")) == CUSTOMER_TYPE_CORPORATE else "Ind"
-    _risk = str(row.get("RiskStatus", "Low"))
-    _cdd = str(row.get("CDDLevel", "—")) or "—"
-    _sanc = str(row.get("SanctionsReview", ""))
-    _sanc_d = "Pending" if _sanc == SANCTIONS_REVIEW_PENDING else "—"
-    return f"{_name}\n{_cid}   ·   {_acct}   ·   {_ctype}   ·   {_risk}   ·   {_cdd}   ·   {_sanc_d}"
+def _build_customer_table_html(view: pd.DataFrame) -> str:
+    """Full-width HTML table; row click sets ?kyc_view= in the parent URL."""
+    _rows: list[str] = []
+    for _, _row in view.iterrows():
+        _cid = html_lib.escape(str(_row["id"]))
+        _name = html_lib.escape(str(_row["FullName"]))
+        _acct = html_lib.escape(str(_row["AccountNo"]))
+        _ctype = "Corp" if str(_row.get("customer_type", "")) == CUSTOMER_TYPE_CORPORATE else "Ind"
+        _risk = str(_row.get("RiskStatus", "Low"))
+        _cdd = html_lib.escape(str(_row.get("CDDLevel", "—")) or "—")
+        _sanc = str(_row.get("SanctionsReview", ""))
+        _sanc_cell = (
+            "<span class='kyc-risk-badge' style='background:rgba(77,166,255,0.15);color:#4da6ff'>"
+            "Pending</span>"
+            if _sanc == SANCTIONS_REVIEW_PENDING
+            else "<span style='color:#666'>—</span>"
+        )
+        _rows.append(
+            f"<tr class='kyc-clickable' onclick=\"openKycCustomer('{_cid}')\">"
+            f"<td class='col-name'><strong>{_name}</strong>"
+            f"<div class='kyc-cid'>{_cid}</div></td>"
+            f"<td class='col-acct'>{_acct}</td>"
+            f"<td class='col-type'>{_ctype}</td>"
+            f"<td class='col-risk'>{_risk_badge_html(_risk)}</td>"
+            f"<td class='col-cdd'>{_cdd}</td>"
+            f"<td class='col-sanc'>{_sanc_cell}</td>"
+            f"</tr>"
+        )
+
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta charset="utf-8" />
+    <style>
+      * {{ box-sizing: border-box; }}
+      body {{
+        margin: 0;
+        padding: 0;
+        font-family: "Source Sans Pro", sans-serif;
+        background: transparent;
+        color: #fafafa;
+      }}
+      .kyc-full-table {{
+        width: 100%;
+        table-layout: fixed;
+        border-collapse: collapse;
+      }}
+      .kyc-full-table thead th {{
+        text-align: left;
+        font-size: 11px;
+        font-weight: 700;
+        color: #666;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        padding: 10px 10px 12px 10px;
+        border-bottom: 1px solid #2a2d3a;
+      }}
+      .kyc-full-table tbody td {{
+        padding: 12px 10px;
+        vertical-align: middle;
+        border-bottom: 1px solid #1e2130;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 13px;
+      }}
+      .kyc-full-table .col-name {{ width: 30%; white-space: normal; }}
+      .kyc-full-table .col-name strong {{
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }}
+      .kyc-cid {{
+        font-size: 11px;
+        color: #888;
+        margin-top: 4px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }}
+      .kyc-full-table .col-acct {{ width: 18%; }}
+      .kyc-full-table .col-type {{ width: 8%; color: #aaa; }}
+      .kyc-full-table .col-risk {{ width: 14%; }}
+      .kyc-full-table .col-cdd {{ width: 14%; color: #ccc; }}
+      .kyc-full-table .col-sanc {{ width: 12%; }}
+      tr.kyc-clickable {{ cursor: pointer; }}
+      tr.kyc-clickable:hover td {{
+        background: rgba(77, 166, 255, 0.1);
+      }}
+      .kyc-risk-badge {{
+        display: inline-block;
+        white-space: nowrap;
+        padding: 2px 10px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 700;
+      }}
+    </style>
+    </head>
+    <body>
+    <table class="kyc-full-table">
+      <thead>
+        <tr>
+          <th class="col-name">Name / ID</th>
+          <th class="col-acct">Account</th>
+          <th class="col-type">Type</th>
+          <th class="col-risk">Risk</th>
+          <th class="col-cdd">CDD</th>
+          <th class="col-sanc">Sanc.</th>
+        </tr>
+      </thead>
+      <tbody>
+        {"".join(_rows)}
+      </tbody>
+    </table>
+    <script>
+      function openKycCustomer(id) {{
+        try {{
+          const u = new URL(window.parent.location.href);
+          u.searchParams.set("kyc_view", id);
+          window.parent.location.href = u.toString();
+        }} catch (e) {{
+          console.error(e);
+        }}
+      }}
+    </script>
+    </body>
+    </html>
+    """
+
+
+def _query_param_customer_id() -> str | None:
+    _raw = st.query_params.get("kyc_view")
+    if not _raw:
+        return None
+    return str(_raw[0] if isinstance(_raw, list) else _raw).strip() or None
+
+
+def _clear_view_customer_param() -> None:
+    if "kyc_view" in st.query_params:
+        del st.query_params["kyc_view"]
 
 
 def _complete_enrolment(pending: dict) -> None:
@@ -534,7 +635,7 @@ def _customer_detail_dialog(customer_id: str) -> None:
             st.error("Update failed.")
 
     if st.button("Close", key=f"detail_close_{customer_id}"):
-        st.session_state.pop("kyc_view_customer_id", None)
+        _clear_view_customer_param()
         st.rerun()
 
 
@@ -650,36 +751,15 @@ with _tab_registry:
         if _view.empty:
             st.info("No customers match your search.")
         else:
-            st.markdown(
-                """
-                <div class="kyc-table-head">
-                    <span>Name / ID</span>
-                    <span>Account</span>
-                    <span>Type</span>
-                    <span>Risk</span>
-                    <span>CDD</span>
-                    <span>Sanc.</span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            for _, _row in _view.iterrows():
-                _cid = str(_row["id"])
-                st.button(
-                    _customer_row_button_label(_row),
-                    key=f"kyc_open_{_cid}",
-                    use_container_width=True,
-                    type="secondary",
-                    on_click=_set_view_customer,
-                    args=(_cid,),
-                )
+            _table_h = 58 + len(_view) * 54
+            components.html(_build_customer_table_html(_view), height=_table_h, scrolling=False)
 
             if _search.strip():
                 st.caption(f"Showing {len(_view)} of {len(customers)} customers")
 
-    if st.session_state.get("kyc_view_customer_id"):
-        _customer_detail_dialog(st.session_state["kyc_view_customer_id"])
+    _view_cid = _query_param_customer_id()
+    if _view_cid:
+        _customer_detail_dialog(_view_cid)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
