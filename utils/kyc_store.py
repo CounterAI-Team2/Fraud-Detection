@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import random
 import re
 from datetime import UTC, datetime
@@ -9,7 +10,25 @@ from pathlib import Path
 import pandas as pd
 
 KYC_PATH = Path("data/kyc_customers.csv")
+KYC_META_PATH = Path("data/kyc_generation_meta.json")
 IRAN_NAMES_PATH = Path("iran_names.txt")
+
+KYC_SEARCH_COLUMNS = [
+    "FullName",
+    "Aliases",
+    "id",
+    "AccountNo",
+    "Email",
+    "Nationality",
+    "NationalIdNumber",
+    "Occupation",
+    "Address",
+    "ContactNo",
+    "PurposeOfAccount",
+    "CompanyRegistrationNo",
+]
+
+KYC_PAGE_SIZE_DEFAULT = 50
 
 CUSTOMER_TYPE_INDIVIDUAL = "Individual"
 CUSTOMER_TYPE_CORPORATE = "Corporate"
@@ -473,18 +492,126 @@ def _migrate_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _account_source_fingerprint() -> str:
+    from utils.kyc_generator import ROOT_ACCOUNT_ID_CSV_CANDIDATES, TRANSACTION_ACCOUNT_SOURCES
+
+    for path in ROOT_ACCOUNT_ID_CSV_CANDIDATES:
+        if path.exists():
+            stat = path.stat()
+            return f"root:{path.name}:{stat.st_mtime_ns}:{stat.st_size}"
+    parts: list[str] = []
+    for path in TRANSACTION_ACCOUNT_SOURCES:
+        if path.exists():
+            stat = path.stat()
+            parts.append(f"{path.name}:{stat.st_mtime_ns}:{stat.st_size}")
+    return "tx:" + "|".join(parts)
+
+
+def _read_generation_meta() -> dict:
+    if not KYC_META_PATH.exists():
+        return {}
+    try:
+        return json.loads(KYC_META_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+
+
+def _write_generation_meta(row_count: int, source: str) -> None:
+    KYC_META_PATH.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "row_count": row_count,
+        "source": source,
+        "source_fingerprint": _account_source_fingerprint(),
+        "generated_at": _utc_now_iso(),
+    }
+    KYC_META_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _needs_bulk_regeneration(existing: pd.DataFrame) -> bool:
+    from utils.kyc_generator import KYC_TARGET_ROW_COUNT
+
+    meta = _read_generation_meta()
+    fingerprint = _account_source_fingerprint()
+    if meta.get("source_fingerprint") != fingerprint:
+        return True
+    if existing.empty:
+        return True
+    if len(existing) < KYC_TARGET_ROW_COUNT:
+        return True
+    return False
+
+
+def search_kyc_customers(
+    customers: pd.DataFrame,
+    query: str = "",
+    *,
+    risk_filter: str = "All",
+    type_filter: str = "All",
+) -> pd.DataFrame:
+    """Filter customers by text query, risk tier, and customer type."""
+    df = customers.copy()
+    if type_filter and type_filter != "All":
+        df = df[df["customer_type"].astype(str) == type_filter]
+    if risk_filter and risk_filter != "All":
+        df = df[df["RiskStatus"].astype(str) == risk_filter]
+
+    needle = query.strip().lower()
+    if needle:
+        mask = pd.Series(False, index=df.index)
+        for column in KYC_SEARCH_COLUMNS:
+            if column not in df.columns:
+                continue
+            mask |= df[column].astype(str).str.lower().str.contains(needle, na=False, regex=False)
+        df = df[mask]
+    return df.reset_index(drop=True)
+
+
+def paginate_kyc_customers(
+    customers: pd.DataFrame,
+    page: int,
+    page_size: int = KYC_PAGE_SIZE_DEFAULT,
+) -> tuple[pd.DataFrame, int, int, int]:
+    """Return (page_slice, current_page, total_pages, total_rows)."""
+    total_rows = len(customers)
+    if total_rows == 0:
+        return customers.iloc[0:0], 1, 0, 0
+    total_pages = max(1, (total_rows + page_size - 1) // page_size)
+    current_page = max(1, min(int(page), total_pages))
+    start = (current_page - 1) * page_size
+    end = start + page_size
+    return customers.iloc[start:end], current_page, total_pages, total_rows
+
+
+def regenerate_kyc_database(*, row_count: int | None = None, seed: int = 42) -> tuple[int, str]:
+    from utils.kyc_generator import KYC_TARGET_ROW_COUNT, generate_kyc_database
+
+    target = row_count or KYC_TARGET_ROW_COUNT
+    bulk_df, source = generate_kyc_database(row_count=target, seed=seed)
+    save_kyc_customers(bulk_df)
+    _write_generation_meta(len(bulk_df), source)
+    return len(bulk_df), source
+
+
 def ensure_kyc_database() -> None:
     _ensure_parent()
     if KYC_PATH.exists():
         df = pd.read_csv(KYC_PATH, dtype=str)
+        if not df.empty and not _needs_bulk_regeneration(df):
+            if any(col not in df.columns for col in KYC_COLUMNS):
+                save_kyc_customers(_migrate_dataframe(df))
+            return
+
+    try:
+        regenerate_kyc_database()
+        return
+    except (FileNotFoundError, ValueError):
+        pass
+
+    if KYC_PATH.exists():
+        df = pd.read_csv(KYC_PATH, dtype=str)
         if not df.empty:
-            needs_save = any(col not in df.columns for col in KYC_COLUMNS)
             migrated = _migrate_dataframe(df)
-            if not needs_save and "4624222122" in migrated["id"].astype(str).values:
-                sample = migrated[migrated["id"].astype(str) == "4624222122"].iloc[0]
-                needs_save = not str(sample.get("Email", "")).strip()
-            if needs_save:
-                save_kyc_customers(migrated)
+            save_kyc_customers(migrated)
             return
 
     seed = pd.DataFrame(MOCK_KYC_ROWS, columns=KYC_COLUMNS)

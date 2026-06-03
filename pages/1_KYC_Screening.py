@@ -31,6 +31,7 @@ from utils.kyc_store import (
     CUSTOMER_RISK_STATUSES as KYC_RISK_STATUSES,
     CUSTOMER_TYPE_CORPORATE,
     CUSTOMER_TYPE_INDIVIDUAL,
+    KYC_PAGE_SIZE_DEFAULT,
     RISK_CRITICAL,
     RISK_HIGH,
     SANCTIONS_REVIEW_PENDING,
@@ -39,6 +40,8 @@ from utils.kyc_store import (
     ensure_kyc_database,
     get_kyc_by_id,
     get_kyc_customers,
+    paginate_kyc_customers,
+    search_kyc_customers,
     set_customer_risk_status,
     update_kyc_record,
 )
@@ -618,38 +621,87 @@ with _tab_registry:
     with _toolbar_l:
         _search = st.text_input(
             "Search customers",
-            placeholder="Name, customer ID, account, email, or nationality…",
+            placeholder="Search name, account, email, ID number, nationality, occupation…",
             label_visibility="collapsed",
+            key="kyc_search_query",
         )
     with _toolbar_r:
         if st.button("+ Enrol new customer", type="primary", use_container_width=True):
             st.session_state.pop("kyc_pending_enrol", None)
             _enrol_dialog()
 
+    _filter_risk, _filter_type, _page_size_col = st.columns([1, 1, 1])
+    with _filter_risk:
+        _risk_filter = st.selectbox(
+            "Risk filter",
+            ["All", *CUSTOMER_RISK_STATUSES],
+            label_visibility="collapsed",
+            key="kyc_filter_risk",
+        )
+    with _filter_type:
+        _type_filter = st.selectbox(
+            "Type filter",
+            ["All", CUSTOMER_TYPE_INDIVIDUAL, CUSTOMER_TYPE_CORPORATE],
+            label_visibility="collapsed",
+            key="kyc_filter_type",
+        )
+    with _page_size_col:
+        _page_size = int(
+            st.selectbox(
+                "Rows per page",
+                [25, 50, 100, 200],
+                index=[25, 50, 100, 200].index(KYC_PAGE_SIZE_DEFAULT),
+                label_visibility="collapsed",
+                key="kyc_page_size",
+            )
+        )
+
+    _filter_key = f"{_search}|{_risk_filter}|{_type_filter}|{_page_size}"
+    if st.session_state.get("kyc_filter_key") != _filter_key:
+        st.session_state["kyc_filter_key"] = _filter_key
+        st.session_state["kyc_page"] = 1
+
+    if "kyc_page" not in st.session_state:
+        st.session_state["kyc_page"] = 1
+
     with st.container(border=True):
         _th1, _th2 = st.columns([4, 1])
         _th1.markdown("**Customer database**")
         _th2.markdown(
             f"<div style='text-align:right;color:#555;font-size:12px;padding-top:6px'>"
-            f"{len(customers)} enrolled</div>",
+            f"{len(customers):,} enrolled</div>",
             unsafe_allow_html=True,
         )
 
-        _view = customers.copy()
-        if _search.strip():
-            _needle = _search.strip().lower()
-            _view = _view[
-                _view["FullName"].astype(str).str.lower().str.contains(_needle)
-                | _view["id"].astype(str).str.lower().str.contains(_needle)
-                | _view["AccountNo"].astype(str).str.lower().str.contains(_needle)
-                | _view["Email"].astype(str).str.lower().str.contains(_needle, na=False)
-                | _view["Nationality"].astype(str).str.lower().str.contains(_needle, na=False)
-            ]
+        _filtered = search_kyc_customers(
+            customers,
+            _search,
+            risk_filter=_risk_filter,
+            type_filter=_type_filter,
+        )
+        _page_df, _page_num, _total_pages, _total_matches = paginate_kyc_customers(
+            _filtered,
+            st.session_state["kyc_page"],
+            page_size=_page_size,
+        )
+        st.session_state["kyc_page"] = _page_num
+
+        if _search.strip() or _risk_filter != "All" or _type_filter != "All":
+            st.caption(
+                f"**{_total_matches:,}** match"
+                f"{'es' if _total_matches != 1 else ''}"
+                + (f" · page **{_page_num}** of **{_total_pages}**" if _total_pages else "")
+            )
+        else:
+            st.caption(
+                f"Showing page **{_page_num}** of **{_total_pages}** "
+                f"({min(_page_size, _total_matches):,} of {_total_matches:,} customers)"
+            )
 
         st.caption("Click anywhere on a row to open the full KYC profile.")
 
-        if _view.empty:
-            st.info("No customers match your search.")
+        if _total_matches == 0:
+            st.info("No customers match your search or filters.")
         else:
             _col_weights = [3.2, 2.0, 0.85, 1.05, 1.05, 0.9]
             _hdr = st.columns(_col_weights)
@@ -661,7 +713,7 @@ with _tab_registry:
 
             st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
-            for _, _row in _view.iterrows():
+            for _, _row in _page_df.iterrows():
                 _cid = str(_row["id"])
                 st.button(
                     _customer_row_label(_row),
@@ -672,8 +724,29 @@ with _tab_registry:
                     args=(_cid,),
                 )
 
-            if _search.strip():
-                st.caption(f"Showing {len(_view)} of {len(customers)} customers")
+            _nav1, _nav2, _nav3, _nav4, _nav5 = st.columns([1, 1, 2, 1, 1])
+            with _nav1:
+                if st.button("⏮ First", disabled=_page_num <= 1, use_container_width=True):
+                    st.session_state["kyc_page"] = 1
+                    st.rerun()
+            with _nav2:
+                if st.button("◀ Prev", disabled=_page_num <= 1, use_container_width=True):
+                    st.session_state["kyc_page"] = max(1, _page_num - 1)
+                    st.rerun()
+            with _nav3:
+                st.markdown(
+                    f"<div style='text-align:center;padding-top:8px;color:#888;font-size:13px'>"
+                    f"Page {_page_num} of {_total_pages}</div>",
+                    unsafe_allow_html=True,
+                )
+            with _nav4:
+                if st.button("Next ▶", disabled=_page_num >= _total_pages, use_container_width=True):
+                    st.session_state["kyc_page"] = min(_total_pages, _page_num + 1)
+                    st.rerun()
+            with _nav5:
+                if st.button("Last ⏭", disabled=_page_num >= _total_pages, use_container_width=True):
+                    st.session_state["kyc_page"] = _total_pages
+                    st.rerun()
 
     if st.session_state.get("kyc_view_customer_id"):
         _customer_detail_dialog(st.session_state["kyc_view_customer_id"])
