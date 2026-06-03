@@ -1,0 +1,6 @@
+{
+  "row_count": 10000,
+  "source": "transaction datasets (pilot + demo)",
+  "source_fingerprint": "tx:aml_pilot_data.csv:1779098492929896400:1826870|aml_demo_data.csv:1779098492891486500:36802",
+  "generated_at": "2026-06-03T09:18:54.318125+00:00"
+}
