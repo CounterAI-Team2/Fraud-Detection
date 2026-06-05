@@ -23,15 +23,24 @@ from utils.kyc_store import (
 
 KYC_TARGET_ROW_COUNT = 10_000
 
-# Drop a CSV in the repo root (e.g. kyc_account_ids.csv) — first match wins.
+# Primary transaction dataset — unique Sender_account + Receiver_account values.
+PRIMARY_TRANSACTION_DATASET = Path("Dataset.csv")
+
+# Optional explicit account-id list in repo root.
 ROOT_ACCOUNT_ID_CSV_CANDIDATES: tuple[Path, ...] = (
     Path("kyc_account_ids.csv"),
     Path("account_ids.csv"),
 )
 
 TRANSACTION_ACCOUNT_SOURCES: tuple[Path, ...] = (
+    Path("Dataset.csv"),
     Path("data/pilot/aml_pilot_data.csv"),
     Path("data/demo/aml_demo_data.csv"),
+)
+
+SENDER_RECEIVER_COLUMNS: tuple[str, ...] = (
+    "Sender_account",
+    "Receiver_account",
 )
 
 ACCOUNT_COLUMN_ALIASES: tuple[str, ...] = (
@@ -147,27 +156,62 @@ def load_account_ids_from_csv(path: Path, *, limit: int | None = None) -> list[s
     return ids
 
 
+def load_account_ids_from_sender_receiver_csv(
+    path: Path,
+    *,
+    limit: int | None = None,
+) -> list[str]:
+    """Collect unique account ids from Sender_account and Receiver_account columns."""
+    df = pd.read_csv(path, dtype=str, low_memory=False)
+    missing = [c for c in SENDER_RECEIVER_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"{path.name} is missing required columns: {missing}. "
+            f"Expected {list(SENDER_RECEIVER_COLUMNS)}."
+        )
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for col in SENDER_RECEIVER_COLUMNS:
+        for acct in _unique_account_ids(df[col]):
+            if acct in seen:
+                continue
+            seen.add(acct)
+            ordered.append(acct)
+            if limit is not None and len(ordered) >= limit:
+                return ordered
+    return ordered
+
+
 def load_account_ids_from_transactions(*, limit: int | None = None) -> list[str]:
     seen: set[str] = set()
     ordered: list[str] = []
     for path in TRANSACTION_ACCOUNT_SOURCES:
         if not path.exists():
             continue
-        df = pd.read_csv(path, dtype=str, low_memory=False)
-        for col in ("Sender_account", "Receiver_account"):
-            if col not in df.columns:
+        try:
+            batch = load_account_ids_from_sender_receiver_csv(path)
+        except ValueError:
+            continue
+        for acct in batch:
+            if acct in seen:
                 continue
-            for acct in _unique_account_ids(df[col]):
-                if acct not in seen:
-                    seen.add(acct)
-                    ordered.append(acct)
-                    if limit is not None and len(ordered) >= limit:
-                        return ordered
+            seen.add(acct)
+            ordered.append(acct)
+            if limit is not None and len(ordered) >= limit:
+                return ordered
     return ordered
 
 
 def resolve_account_id_source() -> tuple[list[str], str]:
     """Return up to KYC_TARGET_ROW_COUNT account ids and a label describing the source."""
+    if PRIMARY_TRANSACTION_DATASET.exists():
+        ids = load_account_ids_from_sender_receiver_csv(
+            PRIMARY_TRANSACTION_DATASET,
+            limit=KYC_TARGET_ROW_COUNT,
+        )
+        if ids:
+            return ids, f"{PRIMARY_TRANSACTION_DATASET} (Sender_account + Receiver_account)"
+
     for path in ROOT_ACCOUNT_ID_CSV_CANDIDATES:
         if path.exists():
             ids = load_account_ids_from_csv(path, limit=KYC_TARGET_ROW_COUNT)
@@ -179,7 +223,8 @@ def resolve_account_id_source() -> tuple[list[str], str]:
         return tx_ids, "transaction datasets (pilot + demo)"
 
     raise FileNotFoundError(
-        "No account-id source found. Add kyc_account_ids.csv to the project root "
+        "No account-id source found. Add Dataset.csv to the project root "
+        "(with Sender_account and Receiver_account columns), kyc_account_ids.csv, "
         "or ensure data/pilot/aml_pilot_data.csv is present."
     )
 

@@ -493,8 +493,15 @@ def _migrate_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _account_source_fingerprint() -> str:
-    from utils.kyc_generator import ROOT_ACCOUNT_ID_CSV_CANDIDATES, TRANSACTION_ACCOUNT_SOURCES
+    from utils.kyc_generator import (
+        PRIMARY_TRANSACTION_DATASET,
+        ROOT_ACCOUNT_ID_CSV_CANDIDATES,
+        TRANSACTION_ACCOUNT_SOURCES,
+    )
 
+    if PRIMARY_TRANSACTION_DATASET.exists():
+        stat = PRIMARY_TRANSACTION_DATASET.stat()
+        return f"dataset:{stat.st_mtime_ns}:{stat.st_size}"
     for path in ROOT_ACCOUNT_ID_CSV_CANDIDATES:
         if path.exists():
             stat = path.stat()
