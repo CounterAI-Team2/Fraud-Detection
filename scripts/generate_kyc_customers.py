@@ -23,9 +23,14 @@ def main() -> None:
         help=f"Number of KYC rows to generate (default: {KYC_TARGET_ROW_COUNT}).",
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducible names.")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Regenerate even when a full kyc_customers.csv already exists.",
+    )
     args = parser.parse_args()
 
-    count, source = regenerate_kyc_database(row_count=args.rows, seed=args.seed)
+    count, source = regenerate_kyc_database(row_count=args.rows, seed=args.seed, force=args.force)
     print(f"Generated {count:,} KYC rows from account source: {source}")
 
 

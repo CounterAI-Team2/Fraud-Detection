@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import random
 import re
@@ -498,25 +499,36 @@ def _migrate_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _account_source_fingerprint() -> str:
+    """Stable content hash of the account-id source (not file mtime)."""
     from utils.kyc_generator import (
+        KYC_TARGET_ROW_COUNT,
         PRIMARY_TRANSACTION_DATASET,
         ROOT_ACCOUNT_ID_CSV_CANDIDATES,
         TRANSACTION_ACCOUNT_SOURCES,
+        load_account_ids_from_csv,
+        load_account_ids_from_sender_receiver_csv,
+        load_account_ids_from_transactions,
     )
 
     if PRIMARY_TRANSACTION_DATASET.exists():
-        stat = PRIMARY_TRANSACTION_DATASET.stat()
-        return f"dataset:{stat.st_mtime_ns}:{stat.st_size}"
+        ids = load_account_ids_from_sender_receiver_csv(
+            PRIMARY_TRANSACTION_DATASET,
+            limit=KYC_TARGET_ROW_COUNT,
+        )
+        digest = hashlib.sha256(",".join(ids).encode("utf-8")).hexdigest()[:16]
+        return f"dataset:{len(ids)}:{digest}"
+
     for path in ROOT_ACCOUNT_ID_CSV_CANDIDATES:
         if path.exists():
-            stat = path.stat()
-            return f"root:{path.name}:{stat.st_mtime_ns}:{stat.st_size}"
-    parts: list[str] = []
-    for path in TRANSACTION_ACCOUNT_SOURCES:
-        if path.exists():
-            stat = path.stat()
-            parts.append(f"{path.name}:{stat.st_mtime_ns}:{stat.st_size}")
-    return "tx:" + "|".join(parts)
+            ids = load_account_ids_from_csv(path, limit=KYC_TARGET_ROW_COUNT)
+            digest = hashlib.sha256(",".join(ids).encode("utf-8")).hexdigest()[:16]
+            return f"root:{path.name}:{len(ids)}:{digest}"
+
+    ids = load_account_ids_from_transactions(limit=KYC_TARGET_ROW_COUNT)
+    if ids:
+        digest = hashlib.sha256(",".join(ids).encode("utf-8")).hexdigest()[:16]
+        return f"tx:{len(ids)}:{digest}"
+    return "none"
 
 
 def _read_generation_meta() -> dict:
@@ -528,29 +540,44 @@ def _read_generation_meta() -> dict:
         return {}
 
 
-def _write_generation_meta(row_count: int, source: str) -> None:
+def _write_generation_meta(row_count: int, source: str, **extra: str | int) -> None:
     KYC_META_PATH.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "row_count": row_count,
-        "source": source,
-        "source_fingerprint": _account_source_fingerprint(),
-        "generated_at": _utc_now_iso(),
-    }
+    payload = {**_read_generation_meta(), **extra}
+    payload.update(
+        {
+            "row_count": row_count,
+            "source": source,
+            "source_fingerprint": _account_source_fingerprint(),
+            "generated_at": _utc_now_iso(),
+        }
+    )
     KYC_META_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def _backfill_generation_meta(existing: pd.DataFrame, source: str = "existing kyc_customers.csv") -> None:
+    """Record metadata for a bundled CSV without regenerating customer names."""
+    if _read_generation_meta().get("source_fingerprint"):
+        return
+    _write_generation_meta(len(existing), source)
+
+
 def _needs_bulk_regeneration(existing: pd.DataFrame) -> bool:
+    """
+    Only regenerate when there is no usable dataset yet.
+
+    Existing 10k rows are preserved across deploys; schema gaps are migrated in place.
+    """
     from utils.kyc_generator import KYC_TARGET_ROW_COUNT
 
-    meta = _read_generation_meta()
-    fingerprint = _account_source_fingerprint()
-    if meta.get("source_fingerprint") != fingerprint:
-        return True
     if existing.empty:
         return True
-    if len(existing) < KYC_TARGET_ROW_COUNT:
-        return True
-    return False
+    if len(existing) >= KYC_TARGET_ROW_COUNT:
+        _backfill_generation_meta(existing)
+        return False
+    meta = _read_generation_meta()
+    if meta.get("row_count", 0) >= KYC_TARGET_ROW_COUNT:
+        return False
+    return len(existing) < KYC_TARGET_ROW_COUNT
 
 
 def search_kyc_customers(
@@ -600,13 +627,30 @@ def paginate_kyc_customers(
     return customers.iloc[start:end], current_page, total_pages, total_rows
 
 
-def regenerate_kyc_database(*, row_count: int | None = None, seed: int = 42) -> tuple[int, str]:
+def regenerate_kyc_database(
+    *,
+    row_count: int | None = None,
+    seed: int = 42,
+    force: bool = False,
+) -> tuple[int, str]:
+    from utils.fatf_jurisdictions import FATF_LIST_VERSION
     from utils.kyc_generator import KYC_TARGET_ROW_COUNT, generate_kyc_database
 
     target = row_count or KYC_TARGET_ROW_COUNT
+    if KYC_PATH.exists() and not force:
+        existing = pd.read_csv(KYC_PATH, dtype=str)
+        if not existing.empty and len(existing) >= target and not _needs_bulk_regeneration(existing):
+            source = str(_read_generation_meta().get("source", "existing kyc_customers.csv"))
+            return len(existing), source
+
     bulk_df, source = generate_kyc_database(row_count=target, seed=seed)
     save_kyc_customers(bulk_df)
-    _write_generation_meta(len(bulk_df), source)
+    _write_generation_meta(
+        len(bulk_df),
+        source,
+        generator_seed=seed,
+        fatf_list_version=FATF_LIST_VERSION,
+    )
     return len(bulk_df), source
 
 

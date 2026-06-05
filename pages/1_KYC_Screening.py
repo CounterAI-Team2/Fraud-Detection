@@ -75,36 +75,47 @@ st.markdown(
         font-weight: 700;
         line-height: 1.4;
     }
-    /* Customer list row buttons (keys prefixed kyc_row_) */
-    [class*="st-key-kyc_row_"] button {
+    /* Aligned KYC row cells (keys prefixed kycrow_) */
+    [class*="st-key-kycrow_"] {
+        margin-bottom: 0 !important;
+    }
+    [class*="st-key-kycrow_"] button {
         width: 100% !important;
-        min-height: 52px !important;
+        min-height: 54px !important;
         height: auto !important;
-        padding: 10px 14px !important;
-        margin: 0 0 6px 0 !important;
+        padding: 10px 8px !important;
+        margin: 0 !important;
         text-align: left !important;
         justify-content: flex-start !important;
         background: rgba(255, 255, 255, 0.03) !important;
         border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        border-radius: 8px !important;
+        border-radius: 0 !important;
+        border-right: none !important;
     }
-    [class*="st-key-kyc_row_"] button:hover {
+    [class*="st-key-kycrow_"][class*="_0"] button {
+        border-radius: 8px 0 0 8px !important;
+    }
+    [class*="st-key-kycrow_"][class*="_5"] button {
+        border-radius: 0 8px 8px 0 !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }
+    [class*="st-key-kycrow_"] button:hover {
         background: rgba(77, 166, 255, 0.14) !important;
         border-color: rgba(77, 166, 255, 0.45) !important;
     }
-    [class*="st-key-kyc_row_"] button p {
+    [class*="st-key-kycrow_"] button p {
         text-align: left !important;
-        white-space: pre !important;
-        font-family: "Source Sans Pro", sans-serif !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
         font-size: 13px !important;
-        line-height: 1.5 !important;
+        line-height: 1.4 !important;
         margin: 0 !important;
-        width: 100% !important;
     }
-    [class*="st-key-kyc_row_"] button svg,
-    [class*="st-key-kyc_row_"] button [data-testid="stIconMaterial"] {
-        display: none !important;
+    [class*="st-key-kycrow_"][class*="_0"] button p {
+        white-space: normal !important;
     }
+    .kyc-row-spacer { height: 6px; }
     .kyc-col-header {
         font-size: 11px;
         font-weight: 700;
@@ -149,20 +160,40 @@ def _open_customer_profile(customer_id: str) -> None:
     st.session_state["kyc_view_customer_id"] = str(customer_id)
 
 
-def _customer_row_label(row: pd.Series) -> str:
-    """Two-line label for a full-width row button (aligned with header columns)."""
+KYC_TABLE_COL_WEIGHTS = [3.2, 2.0, 0.85, 1.05, 1.05, 0.9]
+
+
+def _render_kyc_table_row(row: pd.Series) -> None:
+    """One clickable row split into columns aligned with the table header."""
+    _cid = str(row["id"])
     _name = str(row.get("FullName", ""))
-    _cid = str(row.get("id", ""))
     _acct = str(row.get("AccountNo", ""))
     _ctype = "Corp" if str(row.get("customer_type", "")) == CUSTOMER_TYPE_CORPORATE else "Ind"
     _risk = str(row.get("RiskStatus", "Low"))
     _cdd = str(row.get("CDDLevel", "—")) or "—"
     _sanc = str(row.get("SanctionsReview", ""))
     _sanc_d = "Pending" if _sanc == SANCTIONS_REVIEW_PENDING else "—"
-    return (
-        f"{_name}\n"
-        f"{_cid}          {_acct}          {_ctype}          {_risk}          {_cdd}          {_sanc_d}"
-    )
+
+    _cells = [
+        f"{_name}\n{_cid}",
+        _acct,
+        _ctype,
+        _risk,
+        _cdd,
+        _sanc_d,
+    ]
+    _cols = st.columns(KYC_TABLE_COL_WEIGHTS)
+    for _i, (_col, _label) in enumerate(zip(_cols, _cells)):
+        with _col:
+            st.button(
+                _label,
+                key=f"kycrow_{_cid}_{_i}",
+                use_container_width=True,
+                type="secondary",
+                on_click=_open_customer_profile,
+                args=(_cid,),
+            )
+    st.markdown('<div class="kyc-row-spacer"></div>', unsafe_allow_html=True)
 
 
 def _complete_enrolment(pending: dict) -> None:
@@ -719,8 +750,7 @@ with _tab_registry:
         if _total_matches == 0:
             st.info("No customers match your search or filters.")
         else:
-            _col_weights = [3.2, 2.0, 0.85, 1.05, 1.05, 0.9]
-            _hdr = st.columns(_col_weights)
+            _hdr = st.columns(KYC_TABLE_COL_WEIGHTS)
             for _hcol, _htext in zip(
                 _hdr,
                 ["Name / ID", "Account", "Type", "Risk", "CDD", "Sanc."],
@@ -730,15 +760,7 @@ with _tab_registry:
             st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
             for _, _row in _page_df.iterrows():
-                _cid = str(_row["id"])
-                st.button(
-                    _customer_row_label(_row),
-                    key=f"kyc_row_{_cid}",
-                    use_container_width=True,
-                    type="secondary",
-                    on_click=_open_customer_profile,
-                    args=(_cid,),
-                )
+                _render_kyc_table_row(_row)
 
             _nav1, _nav2, _nav3, _nav4, _nav5 = st.columns([1, 1, 2, 1, 1])
             with _nav1:
