@@ -124,6 +124,46 @@ st.markdown(
         letter-spacing: 0.8px;
         padding: 0 4px 8px 4px;
     }
+    .kyc-kpi-card {
+        text-align: center;
+        padding: 12px 6px;
+        min-height: 92px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    .kyc-kpi-label {
+        font-size: 10px;
+        color: #666;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 6px;
+        min-height: 28px;
+        line-height: 1.2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .kyc-kpi-value {
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1;
+    }
+    [class*="st-key-banner_refresh"] button {
+        white-space: nowrap !important;
+        min-width: 92px !important;
+    }
+    [class*="st-key-banner_refresh"] button p {
+        white-space: nowrap !important;
+    }
+    .kyc-filter-label {
+        font-size: 11px;
+        font-weight: 600;
+        color: #888;
+        margin-bottom: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -596,7 +636,7 @@ _STATUS_META = {
 _b_color, _b_label, _b_desc = _STATUS_META.get(_sync_status, ("#888", "Unknown", "Sync status could not be determined."))
 
 with st.container(border=True):
-    _b1, _b2, _b3, _b4 = st.columns([0.4, 5, 1.2, 0.8])
+    _b1, _b2, _b3, _b4 = st.columns([0.4, 4.8, 1.2, 1.0])
     _b1.markdown(
         f"<div style='width:12px;height:12px;border-radius:50%;background:{_b_color};margin-top:8px'></div>",
         unsafe_allow_html=True,
@@ -638,16 +678,15 @@ with _tab_registry:
         (_m3, "Medium",            int(customers["RiskStatus"].astype(str).str.lower().eq("medium").sum()),                          "#fdd835"),
         (_m4, "High",              int(customers["RiskStatus"].astype(str).str.lower().eq("high").sum()),                            "#fb8c00"),
         (_m5, "Critical",          int(customers["RiskStatus"].astype(str).str.lower().eq("critical").sum()),                        "#f44336"),
-        (_m6, "Sanctions Pending", int(customers["SanctionsReview"].astype(str).eq(SANCTIONS_REVIEW_PENDING).sum()),                 "#888"),
+        (_m6, "Sanc. Pending", int(customers["SanctionsReview"].astype(str).eq(SANCTIONS_REVIEW_PENDING).sum()), "#888"),
     ]
     for _mcol, _mlabel, _mval, _mcolor in _kpi_data:
         with _mcol:
             with st.container(border=True):
                 st.markdown(
-                    f"<div style='text-align:center;padding:6px 0'>"
-                    f"<div style='font-size:11px;color:#666;text-transform:uppercase;"
-                    f"letter-spacing:1px;margin-bottom:6px'>{_mlabel}</div>"
-                    f"<div style='font-size:28px;font-weight:700;color:{_mcolor}'>{_mval}</div>"
+                    f"<div class='kyc-kpi-card'>"
+                    f"<div class='kyc-kpi-label'>{_mlabel}</div>"
+                    f"<div class='kyc-kpi-value' style='color:{_mcolor}'>{_mval:,}</div>"
                     f"</div>",
                     unsafe_allow_html=True,
                 )
@@ -656,59 +695,94 @@ with _tab_registry:
     if _success:
         st.success(_success)
 
+    if "kyc_applied_filters" not in st.session_state:
+        st.session_state["kyc_applied_filters"] = {
+            "search": "",
+            "risk": "All",
+            "type": "All",
+            "fatf": "All",
+            "page_size": KYC_PAGE_SIZE_DEFAULT,
+        }
+    if "kyc_page" not in st.session_state:
+        st.session_state["kyc_page"] = 1
+
+    _applied = st.session_state["kyc_applied_filters"]
+    if "kyc_search_input" not in st.session_state:
+        st.session_state["kyc_search_input"] = _applied["search"]
+    if "kyc_filter_risk_input" not in st.session_state:
+        st.session_state["kyc_filter_risk_input"] = _applied["risk"]
+    if "kyc_filter_type_input" not in st.session_state:
+        st.session_state["kyc_filter_type_input"] = _applied["type"]
+    if "kyc_filter_fatf_input" not in st.session_state:
+        st.session_state["kyc_filter_fatf_input"] = _applied["fatf"]
+    if "kyc_page_size_input" not in st.session_state:
+        st.session_state["kyc_page_size_input"] = int(_applied["page_size"])
+
     _toolbar_l, _toolbar_r = st.columns([2, 1])
     with _toolbar_l:
-        _search = st.text_input(
-            "Search customers",
-            placeholder="Search name, account, email, ID number, nationality, occupation…",
+        st.text_input(
+            "Search",
+            placeholder="Search",
             label_visibility="collapsed",
-            key="kyc_search_query",
+            key="kyc_search_input",
         )
     with _toolbar_r:
         if st.button("+ Enrol new customer", type="primary", use_container_width=True):
             st.session_state.pop("kyc_pending_enrol", None)
             _enrol_dialog()
 
-    _filter_risk, _filter_type, _filter_fatf, _page_size_col = st.columns([1, 1, 1, 1])
+    _filter_risk, _filter_type, _filter_fatf, _page_size_col, _filter_btn = st.columns([1, 1, 1, 1, 0.7])
     with _filter_risk:
-        _risk_filter = st.selectbox(
-            "Risk filter",
+        st.markdown("<div class='kyc-filter-label'>Risk level</div>", unsafe_allow_html=True)
+        st.selectbox(
+            "Risk level",
             ["All", *CUSTOMER_RISK_STATUSES],
             label_visibility="collapsed",
-            key="kyc_filter_risk",
+            key="kyc_filter_risk_input",
         )
     with _filter_type:
-        _type_filter = st.selectbox(
-            "Type filter",
+        st.markdown("<div class='kyc-filter-label'>Customer type</div>", unsafe_allow_html=True)
+        st.selectbox(
+            "Customer type",
             ["All", CUSTOMER_TYPE_INDIVIDUAL, CUSTOMER_TYPE_CORPORATE],
             label_visibility="collapsed",
-            key="kyc_filter_type",
+            key="kyc_filter_type_input",
         )
     with _filter_fatf:
-        _fatf_filter = st.selectbox(
-            "FATF filter",
+        st.markdown("<div class='kyc-filter-label'>FATF list</div>", unsafe_allow_html=True)
+        st.selectbox(
+            "FATF list",
             ["All", "Any FATF", "Black", "EDD", "Grey"],
             label_visibility="collapsed",
-            key="kyc_filter_fatf",
+            key="kyc_filter_fatf_input",
         )
     with _page_size_col:
-        _page_size = int(
-            st.selectbox(
-                "Rows per page",
-                [25, 50, 100, 200],
-                index=[25, 50, 100, 200].index(KYC_PAGE_SIZE_DEFAULT),
-                label_visibility="collapsed",
-                key="kyc_page_size",
-            )
+        st.markdown("<div class='kyc-filter-label'>Rows per page</div>", unsafe_allow_html=True)
+        st.selectbox(
+            "Rows per page",
+            [25, 50, 100, 200],
+            label_visibility="collapsed",
+            key="kyc_page_size_input",
         )
+    with _filter_btn:
+        st.markdown("<div class='kyc-filter-label'>&nbsp;</div>", unsafe_allow_html=True)
+        if st.button("Apply filters", type="primary", use_container_width=True):
+            st.session_state["kyc_applied_filters"] = {
+                "search": st.session_state.get("kyc_search_input", "").strip(),
+                "risk": st.session_state.get("kyc_filter_risk_input", "All"),
+                "type": st.session_state.get("kyc_filter_type_input", "All"),
+                "fatf": st.session_state.get("kyc_filter_fatf_input", "All"),
+                "page_size": int(st.session_state.get("kyc_page_size_input", KYC_PAGE_SIZE_DEFAULT)),
+            }
+            st.session_state["kyc_page"] = 1
+            st.rerun()
 
-    _filter_key = f"{_search}|{_risk_filter}|{_type_filter}|{_fatf_filter}|{_page_size}"
-    if st.session_state.get("kyc_filter_key") != _filter_key:
-        st.session_state["kyc_filter_key"] = _filter_key
-        st.session_state["kyc_page"] = 1
-
-    if "kyc_page" not in st.session_state:
-        st.session_state["kyc_page"] = 1
+    _applied = st.session_state["kyc_applied_filters"]
+    _search = _applied["search"]
+    _risk_filter = _applied["risk"]
+    _type_filter = _applied["type"]
+    _fatf_filter = _applied["fatf"]
+    _page_size = int(_applied["page_size"])
 
     with st.container(border=True):
         _th1, _th2 = st.columns([4, 1])
@@ -733,7 +807,13 @@ with _tab_registry:
         )
         st.session_state["kyc_page"] = _page_num
 
-        if _search.strip() or _risk_filter != "All" or _type_filter != "All" or _fatf_filter != "All":
+        _filters_active = (
+            _search.strip()
+            or _risk_filter != "All"
+            or _type_filter != "All"
+            or _fatf_filter != "All"
+        )
+        if _filters_active:
             st.caption(
                 f"**{_total_matches:,}** match"
                 f"{'es' if _total_matches != 1 else ''}"
