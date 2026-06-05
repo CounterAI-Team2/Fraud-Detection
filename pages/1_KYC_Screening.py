@@ -474,6 +474,14 @@ def _customer_detail_dialog(customer_id: str) -> None:
             with _r3:
                 _detail_line("Risk indicators", row.get("RiskIndicators", ""))
                 _detail_line("SM approval", row.get("SMApprovalStatus", "") or "—")
+            _fatf_cat = str(row.get("FATFListCategory", "")).strip()
+            if _fatf_cat:
+                from utils.fatf_jurisdictions import fatf_category_label
+
+                st.warning(
+                    f"**FATF exposure:** {row.get('FATFJurisdiction', '—')} "
+                    f"({fatf_category_label(_fatf_cat)})"
+                )
 
         if _is_corp:
             with st.container(border=True):
@@ -630,7 +638,7 @@ with _tab_registry:
             st.session_state.pop("kyc_pending_enrol", None)
             _enrol_dialog()
 
-    _filter_risk, _filter_type, _page_size_col = st.columns([1, 1, 1])
+    _filter_risk, _filter_type, _filter_fatf, _page_size_col = st.columns([1, 1, 1, 1])
     with _filter_risk:
         _risk_filter = st.selectbox(
             "Risk filter",
@@ -645,6 +653,13 @@ with _tab_registry:
             label_visibility="collapsed",
             key="kyc_filter_type",
         )
+    with _filter_fatf:
+        _fatf_filter = st.selectbox(
+            "FATF filter",
+            ["All", "Any FATF", "Black", "EDD", "Grey"],
+            label_visibility="collapsed",
+            key="kyc_filter_fatf",
+        )
     with _page_size_col:
         _page_size = int(
             st.selectbox(
@@ -656,7 +671,7 @@ with _tab_registry:
             )
         )
 
-    _filter_key = f"{_search}|{_risk_filter}|{_type_filter}|{_page_size}"
+    _filter_key = f"{_search}|{_risk_filter}|{_type_filter}|{_fatf_filter}|{_page_size}"
     if st.session_state.get("kyc_filter_key") != _filter_key:
         st.session_state["kyc_filter_key"] = _filter_key
         st.session_state["kyc_page"] = 1
@@ -678,6 +693,7 @@ with _tab_registry:
             _search,
             risk_filter=_risk_filter,
             type_filter=_type_filter,
+            fatf_filter=_fatf_filter,
         )
         _page_df, _page_num, _total_pages, _total_matches = paginate_kyc_customers(
             _filtered,
@@ -686,7 +702,7 @@ with _tab_registry:
         )
         st.session_state["kyc_page"] = _page_num
 
-        if _search.strip() or _risk_filter != "All" or _type_filter != "All":
+        if _search.strip() or _risk_filter != "All" or _type_filter != "All" or _fatf_filter != "All":
             st.caption(
                 f"**{_total_matches:,}** match"
                 f"{'es' if _total_matches != 1 else ''}"

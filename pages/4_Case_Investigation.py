@@ -164,8 +164,12 @@ with _left:
                 "MAS Appendix B-11(iv)",
             ),
             "high_risk_jurisdiction": (
-                "🔴 High-Risk Jurisdiction",
-                "MAS Notice 626 para 8.6(a)/(b)",
+                "🔴 FATF Black / EDD Jurisdiction",
+                "FATF call for action or EDD jurisdiction",
+            ),
+            "fatf_grey_jurisdiction": (
+                "🟠 FATF Grey List Exposure",
+                "FATF increased monitoring jurisdiction",
             ),
             "profile_inconsistency_flag": (
                 "🟠 Profile Inconsistency",

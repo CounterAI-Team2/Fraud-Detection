@@ -26,6 +26,8 @@ KYC_SEARCH_COLUMNS = [
     "ContactNo",
     "PurposeOfAccount",
     "CompanyRegistrationNo",
+    "FATFJurisdiction",
+    "FATFListCategory",
 ]
 
 KYC_PAGE_SIZE_DEFAULT = 50
@@ -73,6 +75,9 @@ KYC_COLUMNS = [
     "RegisteredOperatingAddress",
     "UBOs",
     "CorporateDocuments",
+    # --- FATF jurisdiction screening (Feb 2026 lists) ---
+    "FATFJurisdiction",
+    "FATFListCategory",
 ]
 
 # Overview table columns (summary only).
@@ -554,13 +559,19 @@ def search_kyc_customers(
     *,
     risk_filter: str = "All",
     type_filter: str = "All",
+    fatf_filter: str = "All",
 ) -> pd.DataFrame:
-    """Filter customers by text query, risk tier, and customer type."""
+    """Filter customers by text query, risk tier, customer type, and FATF list."""
     df = customers.copy()
     if type_filter and type_filter != "All":
         df = df[df["customer_type"].astype(str) == type_filter]
     if risk_filter and risk_filter != "All":
         df = df[df["RiskStatus"].astype(str) == risk_filter]
+    if fatf_filter and fatf_filter != "All":
+        if fatf_filter == "Any FATF":
+            df = df[df["FATFListCategory"].astype(str).str.strip() != ""]
+        else:
+            df = df[df["FATFListCategory"].astype(str) == fatf_filter]
 
     needle = query.strip().lower()
     if needle:
@@ -625,6 +636,26 @@ def ensure_kyc_database() -> None:
     seed.to_csv(KYC_PATH, index=False)
 
 
+def _apply_fatf_screening_to_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
+    from utils.fatf_jurisdictions import FATF_LIST_VERSION, apply_fatf_to_kyc_row
+
+    meta = _read_generation_meta()
+    if meta.get("fatf_list_version") == FATF_LIST_VERSION:
+        return df, False
+
+    out = df.copy()
+    for idx, row in out.iterrows():
+        updated = apply_fatf_to_kyc_row(row.to_dict())
+        for key in KYC_COLUMNS:
+            if key in updated:
+                out.at[idx, key] = updated[key]
+
+    meta = {**meta, "fatf_list_version": FATF_LIST_VERSION}
+    KYC_META_PATH.parent.mkdir(parents=True, exist_ok=True)
+    KYC_META_PATH.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    return out, True
+
+
 def get_kyc_customers() -> pd.DataFrame:
     ensure_kyc_database()
     df = pd.read_csv(KYC_PATH, dtype=str)
@@ -632,6 +663,9 @@ def get_kyc_customers() -> pd.DataFrame:
     df = df[KYC_COLUMNS].fillna("")
     df.loc[df["CDDLevel"].astype(str).str.strip() == "", "CDDLevel"] = CDD_SIMPLIFIED
     df.loc[df["customer_type"].astype(str).str.strip() == "", "customer_type"] = CUSTOMER_TYPE_INDIVIDUAL
+    df, fatf_changed = _apply_fatf_screening_to_dataframe(df)
+    if fatf_changed:
+        save_kyc_customers(df)
     return df
 
 
@@ -744,6 +778,10 @@ def enrol_customer(
     row["LastCDDReviewAt"] = _utc_now_iso()
     row["IsPEP"] = row.get("IsPEP") or "No"
 
+    from utils.fatf_jurisdictions import apply_fatf_to_kyc_row
+
+    row = apply_fatf_to_kyc_row(row)
+
     customers = pd.concat([customers, pd.DataFrame([row])], ignore_index=True)
     save_kyc_customers(customers)
     return row, match_info
@@ -782,17 +820,47 @@ def upgrade_kyc_risk_from_transactions(scored_df: pd.DataFrame) -> list[str]:
     return [item["id"] for item in result]
 
 
+def _fatf_exposure_from_transactions(scored_df: pd.DataFrame) -> dict[str, tuple[str, str]]:
+    """Map account number -> (canonical jurisdiction, FATF category) from bank locations."""
+    from utils.fatf_jurisdictions import FATF_CATEGORY_RANK, evaluate_text_fields
+
+    if scored_df is None or scored_df.empty:
+        return {}
+
+    exposure: dict[str, tuple[str, str]] = {}
+    for _, txn in scored_df.iterrows():
+        hit = evaluate_text_fields(
+            str(txn.get("Sender_bank_location", "")),
+            str(txn.get("Receiver_bank_location", "")),
+        )
+        if not hit:
+            continue
+        for col in ("Sender_account", "Receiver_account"):
+            if col not in scored_df.columns:
+                continue
+            account = str(txn.get(col, "")).strip()
+            if not account:
+                continue
+            prior = exposure.get(account)
+            if prior is None or FATF_CATEGORY_RANK[hit[1]] > FATF_CATEGORY_RANK[prior[1]]:
+                exposure[account] = hit
+    return exposure
+
+
 def apply_cdd_escalation_from_transactions(scored_df: pd.DataFrame) -> list[dict[str, str]]:
     """
-    Walk each KYC customer and upgrade RiskStatus + CDDLevel based on the highest
-    risk tier their account/id appears under in flagged transactions.
+    Walk each KYC customer and upgrade RiskStatus + CDDLevel based on:
+    - highest ML risk tier on flagged transactions, and
+    - FATF jurisdiction exposure via transaction bank locations.
 
     Returns the list of changed rows (id, old/new RiskStatus, old/new CDDLevel).
     """
     from utils.cdd_rules import recommend_cdd_level, recommend_risk_status  # avoid cycle
+    from utils.fatf_jurisdictions import apply_fatf_to_kyc_row
 
     involved = _suspicious_accounts(scored_df)
-    if not involved:
+    fatf_by_account = _fatf_exposure_from_transactions(scored_df)
+    if not involved and not fatf_by_account:
         return []
 
     customers = get_kyc_customers()
@@ -803,30 +871,51 @@ def apply_cdd_escalation_from_transactions(scored_df: pd.DataFrame) -> list[dict
         customer_id = str(row["id"]).strip()
         account_no = str(row["AccountNo"]).strip()
         hit_tier = involved.get(customer_id) or involved.get(account_no)
-        if not hit_tier:
+
+        row_dict = row.to_dict()
+        fatf_hit = fatf_by_account.get(account_no)
+        if fatf_hit:
+            row_dict["FATFJurisdiction"] = fatf_hit[0]
+            row_dict["FATFListCategory"] = fatf_hit[1]
+            row_dict = apply_fatf_to_kyc_row(row_dict)
+
+        if not hit_tier and not fatf_hit:
             continue
 
-        sanctions_pending = str(row.get("SanctionsReview", "")).strip() == SANCTIONS_REVIEW_PENDING
-        new_risk = recommend_risk_status(row["RiskStatus"], hit_tier)
+        sanctions_pending = str(row_dict.get("SanctionsReview", "")).strip() == SANCTIONS_REVIEW_PENDING
+        fatf_category = str(row_dict.get("FATFListCategory", ""))
+        txn_tier = hit_tier or "Low"
+        new_risk = recommend_risk_status(
+            row_dict.get("RiskStatus", row["RiskStatus"]),
+            txn_tier,
+            fatf_category=fatf_category,
+        )
         new_cdd = recommend_cdd_level(
-            current_cdd=row["CDDLevel"],
+            current_cdd=row_dict.get("CDDLevel", row["CDDLevel"]),
             risk_status=new_risk,
-            top_txn_tier=hit_tier,
+            top_txn_tier=txn_tier,
             sanctions_pending=sanctions_pending,
+            fatf_category=fatf_category,
         )
 
-        if new_risk == row["RiskStatus"] and new_cdd == row["CDDLevel"]:
+        old_risk = str(row["RiskStatus"])
+        old_cdd = str(row["CDDLevel"])
+        if new_risk == old_risk and new_cdd == old_cdd and not fatf_hit:
             continue
 
         change = {
             "id": customer_id,
             "FullName": str(row["FullName"]),
-            "old_risk": str(row["RiskStatus"]),
+            "old_risk": old_risk,
             "new_risk": new_risk,
-            "old_cdd": str(row["CDDLevel"]),
+            "old_cdd": old_cdd,
             "new_cdd": new_cdd,
-            "trigger_tier": hit_tier,
+            "trigger_tier": hit_tier or f"FATF:{fatf_category}",
         }
+        for key in ("RiskStatus", "CDDLevel", "FATFJurisdiction", "FATFListCategory",
+                    "RiskIndicators", "FlaggedReason", "SMApprovalStatus", "Comments"):
+            if key in row_dict and key in KYC_COLUMNS:
+                customers.at[idx, key] = row_dict[key]
         customers.at[idx, "RiskStatus"] = new_risk
         customers.at[idx, "CDDLevel"] = new_cdd
         customers.at[idx, "LastCDDReviewAt"] = now

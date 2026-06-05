@@ -26,3 +26,8 @@ def test_recommend_for_case_uses_kyc_row():
     assert recommend_for_case(kyc, "Critical") == "Enhanced"
     # Missing KYC row should still recommend a sensible default for a flagged txn.
     assert recommend_for_case(None, "High") == "Enhanced"
+
+
+def test_fatf_grey_floor_in_case_recommendation():
+    kyc = {"CDDLevel": "Simplified", "RiskStatus": "Low", "FATFListCategory": "Grey"}
+    assert recommend_for_case(kyc, "Low") == "Standard"

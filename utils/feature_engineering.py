@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 
 from utils.constants import OFF_HOURS_END, OFF_HOURS_START
+from utils.fatf_jurisdictions import is_fatf_grey_bank_location, is_fatf_high_risk_bank_location
 
 SAML_REQUIRED_COLUMNS = [
     "Time",
@@ -39,22 +40,13 @@ CATEGORICAL_FEATURES = [
     "Receiver_bank_location",
 ]
 
-HIGH_RISK_COUNTRIES = [
-    "Turkey",
-    "UAE",
-    "Morocco",
-    "Nigeria",
-    "Mexico",
-    "Pakistan",
-    "Albania",
-]
-
 RED_FLAG_COLS = [
     "smurfing_flag",
     "uturn_flag",
     "rapid_movement_flag",
     "dormant_spike_flag",
     "high_risk_jurisdiction",
+    "fatf_grey_jurisdiction",
     "profile_inconsistency_flag",
     "cdd_threshold_breach",
     "cross_border",
@@ -141,10 +133,13 @@ def assign_risk_tier(row: pd.Series) -> str:
     score = row.get("red_flag_score", 0)
     rf_flagged = row.get("rf_prediction", 0) == 1
 
-    if row.get("high_risk_jurisdiction", 0) == 1 and (
+    if row.get("high_risk_jurisdiction", 0) == 1:
+        return "High"
+
+    if row.get("fatf_grey_jurisdiction", 0) == 1 and (
         row.get("cross_border", 0) == 1 or row.get("cross_currency", 0) == 1
     ):
-        return "High"
+        return "Medium"
 
     if row.get("smurfing_flag", 0) == 1:
         return "High"

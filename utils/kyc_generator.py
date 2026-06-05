@@ -71,10 +71,15 @@ _LAST_NAMES = (
 )
 
 _NATIONALITIES = (
-    "Singaporean", "British", "Nigerian", "Japanese", "French", "Canadian",
+    "Singaporean", "British", "Japanese", "French", "Canadian",
     "Indian", "Polish", "Spanish", "German", "Australian", "American", "Emirati",
     "Irish", "Malaysian", "Brazilian", "Norwegian", "South Korean", "Italian",
     "Dutch", "Swedish", "Mexican", "Thai", "Indonesian", "New Zealander",
+    # FATF grey-list nationalities (for realistic demo coverage)
+    "Vietnamese", "Kenyan", "Lebanese", "Yemeni", "Venezuelan", "Syrian",
+    "Kuwaiti", "Nepalese", "Angolan",
+    # FATF EDD / black-list nationalities
+    "Burmese", "Iranian", "North Korean",
 )
 
 _OCCUPATIONS = (
@@ -105,6 +110,10 @@ _CITIES = (
     ("Mumbai", "India", "+91"),
     ("Berlin", "Germany", "+49"),
     ("Paris", "France", "+33"),
+    ("Hanoi", "Vietnam", "+84"),
+    ("Nairobi", "Kenya", "+254"),
+    ("Yangon", "Myanmar", "+95"),
+    ("Tehran", "Iran", "+98"),
 )
 
 _CORP_SUFFIXES = ("Pte Ltd", "Ltd", "GmbH", "Inc", "Holdings", "Group", "Trading")
@@ -236,6 +245,14 @@ def _random_dob(rng: random.Random) -> str:
     return (start + timedelta(days=rng.randint(0, days))).isoformat()
 
 
+def _finalize_kyc_row(row: dict[str, str]) -> dict[str, str]:
+    from utils.fatf_jurisdictions import apply_fatf_to_kyc_row
+
+    row.setdefault("FATFJurisdiction", "")
+    row.setdefault("FATFListCategory", "")
+    return apply_fatf_to_kyc_row(row)
+
+
 def _risk_profile(rng: random.Random) -> tuple[str, str]:
     roll = rng.random()
     if roll < 0.62:
@@ -254,7 +271,7 @@ def _build_individual_row(account_no: str, customer_id: str, rng: random.Random)
     city, country, dial = rng.choice(_CITIES)
     risk, cdd = _risk_profile(rng)
     email_slug = re.sub(r"[^a-z0-9]+", ".", f"{first}.{last}".lower()).strip(".")
-    return {
+    row = {
         "id": customer_id,
         "customer_type": CUSTOMER_TYPE_INDIVIDUAL,
         "FullName": f"{first} {last}",
@@ -292,7 +309,10 @@ def _build_individual_row(account_no: str, customer_id: str, rng: random.Random)
         "RegisteredOperatingAddress": "",
         "UBOs": "",
         "CorporateDocuments": "",
+        "FATFJurisdiction": "",
+        "FATFListCategory": "",
     }
+    return _finalize_kyc_row(row)
 
 
 def _build_corporate_row(account_no: str, customer_id: str, rng: random.Random) -> dict[str, str]:
@@ -306,7 +326,7 @@ def _build_corporate_row(account_no: str, customer_id: str, rng: random.Random) 
     slug = re.sub(r"[^a-z0-9]+", "", name.lower())[:18]
     cdd_rank = {CDD_SIMPLIFIED: 0, CDD_STANDARD: 1, CDD_ENHANCED: 2}
     applied_cdd = max(cdd, CDD_STANDARD, key=lambda value: cdd_rank[value])
-    return {
+    row = {
         "id": customer_id,
         "customer_type": CUSTOMER_TYPE_CORPORATE,
         "FullName": name,
@@ -345,7 +365,10 @@ def _build_corporate_row(account_no: str, customer_id: str, rng: random.Random) 
             f"({country}, {rng.randint(40, 85)}%, Director)"
         ),
         "CorporateDocuments": "Registry extract; Certificate of incorporation; UBO declaration",
+        "FATFJurisdiction": "",
+        "FATFListCategory": "",
     }
+    return _finalize_kyc_row(row)
 
 
 def generate_kyc_rows(
