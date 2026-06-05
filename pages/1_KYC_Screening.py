@@ -75,43 +75,84 @@ st.markdown(
         font-weight: 700;
         line-height: 1.4;
     }
-    /* Customer list row buttons (keys prefixed kyc_row_) */
-    [class*="st-key-kyc_row_"] button {
-        width: 100% !important;
-        min-height: 52px !important;
-        height: auto !important;
-        padding: 10px 14px !important;
-        margin: 0 0 6px 0 !important;
-        text-align: left !important;
-        justify-content: flex-start !important;
-        background: rgba(255, 255, 255, 0.03) !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        border-radius: 8px !important;
+    /* Bordered KYC data table */
+    [data-testid="stHorizontalBlock"]:has(.kyc-th),
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-kycrow_"]) {
+        gap: 0 !important;
     }
-    [class*="st-key-kyc_row_"] button:hover {
-        background: rgba(77, 166, 255, 0.14) !important;
-        border-color: rgba(77, 166, 255, 0.45) !important;
+    [data-testid="stHorizontalBlock"]:has(.kyc-th) [data-testid="column"],
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-kycrow_"]) [data-testid="column"] {
+        padding: 0 !important;
     }
-    [class*="st-key-kyc_row_"] button p {
-        text-align: left !important;
-        white-space: pre !important;
-        font-family: "Source Sans Pro", sans-serif !important;
-        font-size: 13px !important;
-        line-height: 1.5 !important;
-        margin: 0 !important;
-        width: 100% !important;
-    }
-    [class*="st-key-kyc_row_"] button svg,
-    [class*="st-key-kyc_row_"] button [data-testid="stIconMaterial"] {
-        display: none !important;
-    }
-    .kyc-col-header {
+    .kyc-th {
+        padding: 10px 10px;
         font-size: 11px;
         font-weight: 700;
-        color: #666;
+        color: #888;
         text-transform: uppercase;
-        letter-spacing: 0.8px;
-        padding: 0 4px 8px 4px;
+        letter-spacing: 0.6px;
+        background: rgba(255, 255, 255, 0.06);
+        border-top: 1px solid rgba(255, 255, 255, 0.14);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+        border-right: 1px solid rgba(255, 255, 255, 0.08);
+        min-height: 40px;
+        display: flex;
+        align-items: center;
+        box-sizing: border-box;
+    }
+    .kyc-th-0 { border-left: 1px solid rgba(255, 255, 255, 0.14); }
+    .kyc-th-5 { border-right: 1px solid rgba(255, 255, 255, 0.14); }
+    [class*="st-key-kycrow_"] {
+        margin-bottom: 0 !important;
+    }
+    [class*="st-key-kycrow_"] button {
+        width: 100% !important;
+        min-height: 50px !important;
+        height: auto !important;
+        padding: 8px 10px !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+        border: none !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+        background: rgba(255, 255, 255, 0.02) !important;
+        box-shadow: none !important;
+    }
+    [class*="st-key-kycrow_"][class*="_0"] button {
+        border-left: 1px solid rgba(255, 255, 255, 0.14) !important;
+    }
+    [class*="st-key-kycrow_"][class*="_5"] button {
+        border-right: 1px solid rgba(255, 255, 255, 0.14) !important;
+    }
+    [class*="st-key-kycrow_"] button:hover {
+        background: rgba(77, 166, 255, 0.12) !important;
+    }
+    [class*="st-key-kycrow_"] button p {
+        font-size: 13px !important;
+        line-height: 1.35 !important;
+        margin: 0 !important;
+        width: 100% !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+    [class*="st-key-kycrow_"][class*="_0"] button p {
+        white-space: pre-line !important;
+        text-align: left !important;
+    }
+    [class*="st-key-kycrow_"][class*="_1"] button p {
+        white-space: nowrap !important;
+        text-align: left !important;
+    }
+    [class*="st-key-kycrow_"][class*="_2"] button p,
+    [class*="st-key-kycrow_"][class*="_3"] button p,
+    [class*="st-key-kycrow_"][class*="_4"] button p,
+    [class*="st-key-kycrow_"][class*="_5"] button p {
+        white-space: nowrap !important;
+        text-align: center !important;
+    }
+    [class*="st-key-kycrow_"] button svg,
+    [class*="st-key-kycrow_"] button [data-testid="stIconMaterial"] {
+        display: none !important;
     }
     .kyc-kpi-card {
         text-align: center;
@@ -196,20 +237,36 @@ def _open_customer_profile(customer_id: str) -> None:
 KYC_TABLE_COL_WEIGHTS = [3.2, 2.0, 0.85, 1.05, 1.05, 0.9]
 
 
-def _customer_row_label(row: pd.Series) -> str:
-    """Two-line label for a full-width row button (aligned with header columns)."""
+def _render_kyc_table_row(row: pd.Series) -> None:
+    """One clickable table row — columns match the header grid."""
+    _cid = str(row["id"])
     _name = str(row.get("FullName", ""))
-    _cid = str(row.get("id", ""))
     _acct = str(row.get("AccountNo", ""))
     _ctype = "Corp" if str(row.get("customer_type", "")) == CUSTOMER_TYPE_CORPORATE else "Ind"
     _risk = str(row.get("RiskStatus", "Low"))
     _cdd = str(row.get("CDDLevel", "—")) or "—"
     _sanc = str(row.get("SanctionsReview", ""))
     _sanc_d = "Pending" if _sanc == SANCTIONS_REVIEW_PENDING else "—"
-    return (
-        f"{_name}\n"
-        f"{_cid:<28}{_acct:<18}{_ctype:^8}{_risk:^10}{_cdd:^12}{_sanc_d:^8}"
-    )
+
+    _cells = [
+        f"{_name}\n{_cid}",
+        _acct,
+        _ctype,
+        _risk,
+        _cdd,
+        _sanc_d,
+    ]
+    _cols = st.columns(KYC_TABLE_COL_WEIGHTS, gap="small")
+    for _i, (_col, _label) in enumerate(zip(_cols, _cells)):
+        with _col:
+            st.button(
+                _label,
+                key=f"kycrow_{_cid}_{_i}",
+                use_container_width=True,
+                type="secondary",
+                on_click=_open_customer_profile,
+                args=(_cid,),
+            )
 
 
 def _complete_enrolment(pending: dict) -> None:
@@ -806,25 +863,18 @@ with _tab_registry:
         if _total_matches == 0:
             st.info("No customers match your search or filters.")
         else:
-            _hdr = st.columns(KYC_TABLE_COL_WEIGHTS)
-            for _hcol, _htext in zip(
-                _hdr,
-                ["Name / ID", "Account", "Type", "Risk", "CDD", "Sanc."],
-            ):
-                _hcol.markdown(f"<div class='kyc-col-header'>{_htext}</div>", unsafe_allow_html=True)
-
-            st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+            _hdr = st.columns(KYC_TABLE_COL_WEIGHTS, gap="small")
+            _header_labels = ["Name / ID", "Account", "Type", "Risk", "CDD", "Sanc."]
+            for _i, (_hcol, _htext) in enumerate(zip(_hdr, _header_labels)):
+                _align = "center" if _i >= 2 else "flex-start"
+                _hcol.markdown(
+                    f"<div class='kyc-th kyc-th-{_i}' style='justify-content:{_align}'>"
+                    f"{_htext}</div>",
+                    unsafe_allow_html=True,
+                )
 
             for _, _row in _page_df.iterrows():
-                _cid = str(_row["id"])
-                st.button(
-                    _customer_row_label(_row),
-                    key=f"kyc_row_{_cid}",
-                    use_container_width=True,
-                    type="secondary",
-                    on_click=_open_customer_profile,
-                    args=(_cid,),
-                )
+                _render_kyc_table_row(_row)
 
             _nav1, _nav2, _nav3, _nav4, _nav5 = st.columns([1, 1, 2, 1, 1])
             with _nav1:
