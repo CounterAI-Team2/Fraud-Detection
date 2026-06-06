@@ -20,6 +20,8 @@ from utils.data_store import get_model_registry
 from utils.feature_engineering import (
     CATEGORICAL_FEATURES,
     ENGINEERED_FEATURES,
+    RED_FLAG_COLS,
+    apply_risk_tier,
     SAML_REQUIRED_COLUMNS,
     engineer_features,
     prepare_model_matrix,
@@ -27,13 +29,19 @@ from utils.feature_engineering import (
 )
 from utils.kyc_store import (
     CUSTOMER_RISK_STATUSES as KYC_RISK_STATUSES,
+    CUSTOMER_TYPE_CORPORATE,
+    CUSTOMER_TYPE_INDIVIDUAL,
+    KYC_PAGE_SIZE_DEFAULT,
     RISK_CRITICAL,
     RISK_HIGH,
     SANCTIONS_REVIEW_PENDING,
     apply_cdd_escalation_from_transactions,
     enrol_customer,
     ensure_kyc_database,
+    get_kyc_by_id,
     get_kyc_customers,
+    paginate_kyc_customers,
+    search_kyc_customers,
     set_customer_risk_status,
     update_kyc_record,
 )
@@ -55,13 +63,152 @@ actor_id, actor_role = get_current_analyst()
 st.title("KYC & Transaction Scoring")
 st.caption("Enrol and manage customers, screen against sanctions lists, upload transaction data, and score AML risk.")
 
+st.markdown(
+    """
+    <style>
+    .kyc-risk-badge {
+        display: inline-block;
+        white-space: nowrap;
+        padding: 2px 10px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.4;
+    }
+    /* Bordered KYC data table */
+    [data-testid="stHorizontalBlock"]:has(.kyc-th),
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-kycrow_"]) {
+        gap: 0 !important;
+    }
+    [data-testid="stHorizontalBlock"]:has(.kyc-th) [data-testid="column"],
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-kycrow_"]) [data-testid="column"] {
+        padding: 0 !important;
+    }
+    .kyc-th {
+        padding: 10px 10px;
+        font-size: 11px;
+        font-weight: 700;
+        color: #888;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        background: rgba(255, 255, 255, 0.06);
+        border-top: 1px solid rgba(255, 255, 255, 0.14);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+        border-right: 1px solid rgba(255, 255, 255, 0.08);
+        min-height: 40px;
+        display: flex;
+        align-items: center;
+        box-sizing: border-box;
+    }
+    .kyc-th-0 { border-left: 1px solid rgba(255, 255, 255, 0.14); }
+    .kyc-th-5 { border-right: 1px solid rgba(255, 255, 255, 0.14); }
+    [class*="st-key-kycrow_"] {
+        margin-bottom: 0 !important;
+    }
+    [class*="st-key-kycrow_"] button {
+        width: 100% !important;
+        min-height: 50px !important;
+        height: auto !important;
+        padding: 8px 10px !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+        border: none !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+        background: rgba(255, 255, 255, 0.02) !important;
+        box-shadow: none !important;
+    }
+    [class*="st-key-kycrow_"][class*="_0"] button {
+        border-left: 1px solid rgba(255, 255, 255, 0.14) !important;
+    }
+    [class*="st-key-kycrow_"][class*="_5"] button {
+        border-right: 1px solid rgba(255, 255, 255, 0.14) !important;
+    }
+    [class*="st-key-kycrow_"] button:hover {
+        background: rgba(77, 166, 255, 0.12) !important;
+    }
+    [class*="st-key-kycrow_"] button p {
+        font-size: 13px !important;
+        line-height: 1.35 !important;
+        margin: 0 !important;
+        width: 100% !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+    [class*="st-key-kycrow_"][class*="_0"] button p {
+        white-space: pre-line !important;
+        text-align: left !important;
+    }
+    [class*="st-key-kycrow_"][class*="_1"] button p {
+        white-space: nowrap !important;
+        text-align: left !important;
+    }
+    [class*="st-key-kycrow_"][class*="_2"] button p,
+    [class*="st-key-kycrow_"][class*="_3"] button p,
+    [class*="st-key-kycrow_"][class*="_4"] button p,
+    [class*="st-key-kycrow_"][class*="_5"] button p {
+        white-space: nowrap !important;
+        text-align: center !important;
+    }
+    [class*="st-key-kycrow_"] button svg,
+    [class*="st-key-kycrow_"] button [data-testid="stIconMaterial"] {
+        display: none !important;
+    }
+    .kyc-kpi-card {
+        text-align: center;
+        width: 100%;
+        padding: 12px 6px;
+        min-height: 92px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+    }
+    .kyc-kpi-label {
+        font-size: 10px;
+        color: #666;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 6px;
+        min-height: 28px;
+        line-height: 1.2;
+        width: 100%;
+        text-align: center;
+    }
+    .kyc-kpi-value {
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1;
+        width: 100%;
+        text-align: center !important;
+    }
+    [class*="st-key-banner_refresh"] button {
+        white-space: nowrap !important;
+        min-width: 92px !important;
+    }
+    [class*="st-key-banner_refresh"] button p {
+        white-space: nowrap !important;
+    }
+    .kyc-filter-label {
+        font-size: 11px;
+        font-weight: 600;
+        color: #888;
+        margin-bottom: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _badge(text: str, style: str) -> str:
     return (
-        f"<span style='display:inline-block;padding:2px 10px;border-radius:20px;"
-        f"font-size:11px;font-weight:700;{style}'>{text}</span>"
+        f"<span class='kyc-risk-badge' style='{style}'>{text}</span>"
     )
 
 def _risk_badge(risk: str) -> str:
@@ -78,13 +225,53 @@ def _sanctions_badge(status: str) -> str:
         return _badge("Pending", "background:rgba(77,166,255,0.15);color:#4da6ff")
     return f"<span style='color:#555'>—</span>"
 
+def _detail_line(label: str, value: str) -> None:
+    display = str(value or "").strip() or "—"
+    st.markdown(f"**{label}**  \n{display}")
+
+
+def _open_customer_profile(customer_id: str) -> None:
+    st.session_state["kyc_view_customer_id"] = str(customer_id)
+
+
+KYC_TABLE_COL_WEIGHTS = [3.2, 2.0, 0.85, 1.05, 1.05, 0.9]
+
+
+def _render_kyc_table_row(row: pd.Series) -> None:
+    """One clickable table row — columns match the header grid."""
+    _cid = str(row["id"])
+    _name = str(row.get("FullName", ""))
+    _acct = str(row.get("AccountNo", ""))
+    _ctype = "Corp" if str(row.get("customer_type", "")) == CUSTOMER_TYPE_CORPORATE else "Ind"
+    _risk = str(row.get("RiskStatus", "Low"))
+    _cdd = str(row.get("CDDLevel", "—")) or "—"
+    _sanc = str(row.get("SanctionsReview", ""))
+    _sanc_d = "Pending" if _sanc == SANCTIONS_REVIEW_PENDING else "—"
+
+    _cells = [
+        f"{_name}\n{_cid}",
+        _acct,
+        _ctype,
+        _risk,
+        _cdd,
+        _sanc_d,
+    ]
+    _cols = st.columns(KYC_TABLE_COL_WEIGHTS, gap="small")
+    for _i, (_col, _label) in enumerate(zip(_cols, _cells)):
+        with _col:
+            st.button(
+                _label,
+                key=f"kycrow_{_cid}_{_i}",
+                use_container_width=True,
+                type="secondary",
+                on_click=_open_customer_profile,
+                args=(_cid,),
+            )
+
+
 def _complete_enrolment(pending: dict) -> None:
     row, match_info = enrol_customer(
-        full_name=pending["FullName"],
-        account_no=pending["AccountNo"],
-        address=pending["Address"],
-        contact_no=pending["ContactNo"],
-        comments=pending.get("Comments", ""),
+        pending,
         sanctions_match=pending.get("sanctions_match"),
     )
     indicators = pending.get("risk_indicators", [])
@@ -123,6 +310,350 @@ def _complete_enrolment(pending: dict) -> None:
     st.session_state["kyc_enrol_success"] = msg
 
 
+@st.dialog("Enrol New Customer", width="large")
+def _enrol_dialog() -> None:
+    st.caption("Customer Identification Program (CIP) — all required fields are screened against sanctions lists.")
+
+    _pending = st.session_state.get("kyc_pending_enrol")
+    if _pending and _pending.get("sanctions_match"):
+        _match = _pending["sanctions_match"]
+        _list_key = _match.get("list_key") or "MAS Targeted Financial Sanctions list"
+        st.warning(
+            f"Potential match on **{_list_key}** "
+            f"(matched: `{_match.get('matched_name', '')}`). "
+            "Additional CDD required before proceeding."
+        )
+        st.write(f"Pending: **{_pending.get('FullName', '')}** · Account **{_pending.get('AccountNo', '')}**")
+        _wc1, _wc2 = st.columns(2)
+        if _wc1.button("Register with Pending Review", type="primary", use_container_width=True):
+            _pending["sanctions_warning_acknowledged"] = True
+            try:
+                _complete_enrolment(_pending)
+                st.rerun()
+            except ValueError as exc:
+                st.error(str(exc))
+        if _wc2.button("Cancel", use_container_width=True):
+            st.session_state.pop("kyc_pending_enrol", None)
+            st.rerun()
+        return
+
+    _ctype = st.radio(
+        "Customer type",
+        [CUSTOMER_TYPE_INDIVIDUAL, CUSTOMER_TYPE_CORPORATE],
+        horizontal=True,
+        key="enrol_customer_type",
+    )
+    _is_corp = _ctype == CUSTOMER_TYPE_CORPORATE
+
+    with st.form("enrol_kyc_form", clear_on_submit=False):
+        st.markdown("##### 1. Basic identification (CIP)")
+        _c1, _c2 = st.columns(2)
+        _full_name = _c1.text_input(
+            "Full legal name *" if not _is_corp else "Registered company name *",
+            placeholder="As on government ID or ACRA register",
+        )
+        _aliases = _c2.text_input("Aliases", placeholder="Semicolon-separated alternate names")
+        if _is_corp:
+            _reg_no = _c1.text_input("Company registration number *", placeholder="e.g. 201912345G")
+            _dob = _nationality = _id_type = _id_number = ""
+        else:
+            _reg_no = ""
+            _dob = _c1.text_input("Date of birth *", placeholder="YYYY-MM-DD")
+            _nationality = _c2.text_input("Nationality *", placeholder="e.g. Singaporean")
+            _id_type = _c1.selectbox("ID type *", ["NRIC", "Passport", "National ID", "Emirates ID", "Other"])
+            _id_number = _c2.text_input("Government ID number *", placeholder="NRIC / passport / SSN")
+
+        st.markdown("##### 2. Contact & proof of residence")
+        _c3, _c4 = st.columns(2)
+        _address = _c3.text_input("Residential / registered address *")
+        _email = _c4.text_input("Email address *", placeholder="name@domain.com")
+        _contact_no = _c3.text_input("Telephone *", placeholder="+65 9000 0000")
+        _account_no = _c4.text_input("Account number *", placeholder="e.g. SG-0041-8812")
+
+        st.markdown("##### 3. Financial profile & employment")
+        if _is_corp:
+            _employment = _occupation = "N/A"
+            _sow = _c3.text_input("Source of wealth", placeholder="Business revenue, investors, etc.")
+            _soi = _c4.text_input("Source of income", placeholder="Operating revenue")
+        else:
+            _employment = _c3.selectbox(
+                "Employment status *",
+                ["Employed", "Self-employed", "Unemployed", "Retired", "Student"],
+            )
+            _occupation = _c4.text_input("Occupation *", placeholder="Job title or role")
+            _sow = _c3.text_input("Source of wealth *", placeholder="Savings, inheritance, property sale…")
+            _soi = _c4.text_input("Source of income *", placeholder="Salary, business profits…")
+        _purpose = st.text_input(
+            "Purpose of account *",
+            placeholder="Personal savings, payroll, trade finance…",
+        )
+
+        if _is_corp:
+            st.markdown("##### 4. Corporate / business")
+            _op_addr = st.text_input("Principal operating address *")
+            _ubos = st.text_area(
+                "Ultimate beneficial owners (UBOs) *",
+                height=68,
+                placeholder="Name; nationality; % ownership; role — one per line",
+            )
+            _corp_docs = st.text_area(
+                "Corporate documents on file *",
+                height=68,
+                placeholder="ACRA BizFile, certificate of incorporation, board resolution…",
+            )
+        else:
+            _op_addr = _ubos = _corp_docs = ""
+
+        st.markdown("##### Risk indicators")
+        _risk_indicators = st.multiselect(
+            "Risk indicators",
+            [
+                "PEP (Politically Exposed Person)",
+                "High-risk jurisdiction",
+                "Adverse media",
+                "Complex ownership structure",
+                "Cash-intensive business",
+                "Non-profit / NGO",
+            ],
+            help="PEP → Critical; any other indicator → High.",
+        )
+        _flag_reason = st.text_input("Flagging reason", placeholder="Required if indicator selected")
+        _comments = st.text_area("Internal comments", height=60, placeholder="Optional analyst notes")
+
+        _submitted = st.form_submit_button("Submit enrolment", type="primary", use_container_width=True)
+
+    if _submitted:
+        _errors: list[str] = []
+        if not _full_name.strip():
+            _errors.append("Full legal name is required.")
+        if not _account_no.strip():
+            _errors.append("Account number is required.")
+        if not _address.strip():
+            _errors.append("Address is required.")
+        if not _email.strip():
+            _errors.append("Email is required.")
+        if not _contact_no.strip():
+            _errors.append("Telephone is required.")
+        if not _purpose.strip():
+            _errors.append("Purpose of account is required.")
+        if _is_corp:
+            if not _reg_no.strip():
+                _errors.append("Company registration number is required.")
+            if not _op_addr.strip():
+                _errors.append("Operating address is required.")
+            if not _ubos.strip():
+                _errors.append("UBO details are required.")
+            if not _corp_docs.strip():
+                _errors.append("Corporate documents are required.")
+        else:
+            if not _dob.strip():
+                _errors.append("Date of birth is required.")
+            if not _nationality.strip():
+                _errors.append("Nationality is required.")
+            if not _id_number.strip():
+                _errors.append("Government ID number is required.")
+            if not _occupation.strip():
+                _errors.append("Occupation is required.")
+            if not _sow.strip():
+                _errors.append("Source of wealth is required.")
+            if not _soi.strip():
+                _errors.append("Source of income is required.")
+        if _errors:
+            for _err in _errors:
+                st.error(_err)
+            return
+
+        _payload: dict = {
+            "customer_type": _ctype,
+            "FullName": _full_name.strip(),
+            "Aliases": _aliases.strip(),
+            "DateOfBirth": _dob.strip(),
+            "Nationality": _nationality.strip(),
+            "NationalIdType": _id_type if not _is_corp else "Registration Number",
+            "NationalIdNumber": (_reg_no if _is_corp else _id_number).strip(),
+            "Address": _address.strip(),
+            "Email": _email.strip(),
+            "ContactNo": _contact_no.strip(),
+            "AccountNo": _account_no.strip(),
+            "EmploymentStatus": _employment,
+            "Occupation": _occupation.strip() if not _is_corp else "N/A",
+            "SourceOfWealth": _sow.strip(),
+            "SourceOfIncome": _soi.strip(),
+            "PurposeOfAccount": _purpose.strip(),
+            "CompanyRegistrationNo": _reg_no.strip() if _is_corp else "",
+            "RegisteredOperatingAddress": _op_addr.strip() if _is_corp else "",
+            "UBOs": _ubos.strip() if _is_corp else "",
+            "CorporateDocuments": _corp_docs.strip() if _is_corp else "",
+            "Comments": _comments.strip(),
+            "risk_indicators": _risk_indicators,
+            "flag_reason": _flag_reason.strip(),
+            "IsPEP": "Yes" if "PEP (Politically Exposed Person)" in _risk_indicators else "No",
+        }
+        _match_info = screen_name(_full_name)
+        if not _match_info.get("matched") and _aliases.strip():
+            for _alias in (a.strip() for a in _aliases.split(";") if a.strip()):
+                _match_info = screen_name(_alias)
+                if _match_info.get("matched"):
+                    break
+        if _match_info.get("matched"):
+            _payload["sanctions_match"] = _match_info
+            st.session_state["kyc_pending_enrol"] = _payload
+            st.rerun()
+        try:
+            _complete_enrolment(_payload)
+            st.rerun()
+        except ValueError as exc:
+            st.error(str(exc))
+
+
+@st.dialog("Customer KYC Profile", width="large")
+def _customer_detail_dialog(customer_id: str) -> None:
+    row = get_kyc_by_id(customer_id)
+    if not row:
+        st.error("Customer not found.")
+        if st.button("Close"):
+            st.rerun()
+        return
+
+    _ctype = str(row.get("customer_type", CUSTOMER_TYPE_INDIVIDUAL))
+    _is_corp = _ctype == CUSTOMER_TYPE_CORPORATE
+    _risk = str(row.get("RiskStatus", "Low"))
+    _sanc = str(row.get("SanctionsReview", ""))
+
+    _hdr_l, _hdr_r = st.columns([3, 1])
+    with _hdr_l:
+        st.markdown(f"### {row.get('FullName', '—')}")
+        st.caption(f"Customer ID `{customer_id}` · {_ctype} · Account `{row.get('AccountNo', '—')}`")
+    with _hdr_r:
+        st.markdown(_risk_badge(_risk), unsafe_allow_html=True)
+        if _sanc == SANCTIONS_REVIEW_PENDING:
+            st.markdown(_sanctions_badge(_sanc), unsafe_allow_html=True)
+
+    _t1, _t2 = st.tabs(["KYC file", "Risk management"])
+
+    with _t1:
+        with st.container(border=True):
+            st.markdown("**1. Basic identification (CIP)**")
+            _g1, _g2, _g3 = st.columns(3)
+            with _g1:
+                _detail_line("Full legal name", row.get("FullName", ""))
+                _detail_line("Aliases", row.get("Aliases", ""))
+            with _g2:
+                if not _is_corp:
+                    _detail_line("Date of birth", row.get("DateOfBirth", ""))
+                    _detail_line("Nationality", row.get("Nationality", ""))
+            with _g3:
+                _detail_line("ID type", row.get("NationalIdType", ""))
+                _detail_line("Government ID", row.get("NationalIdNumber", ""))
+
+        with st.container(border=True):
+            st.markdown("**2. Contact & proof of residence**")
+            _c1, _c2 = st.columns(2)
+            with _c1:
+                _detail_line("Residential / registered address", row.get("Address", ""))
+                _detail_line("Telephone", row.get("ContactNo", ""))
+            with _c2:
+                _detail_line("Email", row.get("Email", ""))
+
+        with st.container(border=True):
+            st.markdown("**3. Financial profile & employment**")
+            _f1, _f2 = st.columns(2)
+            with _f1:
+                _detail_line("Employment status", row.get("EmploymentStatus", ""))
+                _detail_line("Occupation", row.get("Occupation", ""))
+                _detail_line("Source of wealth", row.get("SourceOfWealth", ""))
+            with _f2:
+                _detail_line("Source of income", row.get("SourceOfIncome", ""))
+                _detail_line("Purpose of account", row.get("PurposeOfAccount", ""))
+
+        with st.container(border=True):
+            st.markdown("**4. Risk assessment**")
+            _r1, _r2, _r3 = st.columns(3)
+            with _r1:
+                _detail_line("PEP status", row.get("IsPEP", "No") or "No")
+                _detail_line("Risk status", _risk)
+            with _r2:
+                _detail_line("CDD level", row.get("CDDLevel", ""))
+                _detail_line("Sanctions review", _sanc or "Clear")
+            with _r3:
+                _detail_line("Risk indicators", row.get("RiskIndicators", ""))
+                _detail_line("SM approval", row.get("SMApprovalStatus", "") or "—")
+            _fatf_cat = str(row.get("FATFListCategory", "")).strip()
+            if _fatf_cat:
+                from utils.fatf_jurisdictions import fatf_category_label
+
+                st.warning(
+                    f"**FATF exposure:** {row.get('FATFJurisdiction', '—')} "
+                    f"({fatf_category_label(_fatf_cat)})"
+                )
+
+        if _is_corp:
+            with st.container(border=True):
+                st.markdown("**5. Corporate / business**")
+                _detail_line("Registration number", row.get("CompanyRegistrationNo", ""))
+                _detail_line("Operating address", row.get("RegisteredOperatingAddress", ""))
+                _detail_line("Ultimate beneficial owners", row.get("UBOs", ""))
+                _detail_line("Documents on file", row.get("CorporateDocuments", ""))
+
+        if str(row.get("Comments", "")).strip():
+            with st.container(border=True):
+                st.markdown("**Internal comments**")
+                st.write(row.get("Comments", ""))
+
+    with _t2:
+        _cur_pep = str(row.get("IsPEP", "")).strip().lower() == "yes"
+        _cur_sm = str(row.get("SMApprovalStatus", ""))
+        if _cur_sm == SM_APPROVAL_PENDING:
+            st.warning("Pending Senior Management approval.")
+
+        _rmc1, _rmc2 = st.columns(2)
+        _new_risk = _rmc1.selectbox(
+            "Risk status",
+            CUSTOMER_RISK_STATUSES,
+            index=CUSTOMER_RISK_STATUSES.index(_risk) if _risk in CUSTOMER_RISK_STATUSES else 0,
+            key=f"detail_risk_{customer_id}",
+        )
+        _reason_opts = ["Manual", "PEP", "High-risk jurisdiction", "Complex profile", "Other"]
+        _reason = _rmc2.selectbox("Reason", _reason_opts, key=f"detail_reason_{customer_id}")
+        _custom_reason = ""
+        if _reason == "Other":
+            _custom_reason = st.text_input("Specify reason", key=f"detail_custom_{customer_id}")
+        _is_pep = st.checkbox("Flag as PEP", value=_cur_pep, key=f"detail_pep_{customer_id}")
+
+        _final_risk = RISK_CRITICAL if _is_pep else _new_risk
+        _final_reason = FLAG_REASON_PEP if _is_pep else (_custom_reason.strip() if _reason == "Other" else _reason)
+        if _is_pep and _new_risk != RISK_CRITICAL:
+            st.info("PEP flag sets risk to Critical.")
+
+        if st.button("Save risk changes", type="primary", key=f"detail_save_{customer_id}"):
+            _aid2, _arole2 = get_current_analyst()
+            _updated = set_customer_risk_status(
+                customer_id=customer_id,
+                new_status=_final_risk,
+                actor_id=_aid2,
+                reason=_final_reason,
+                is_pep=True if _is_pep else (False if not _cur_pep else None),
+            )
+            if _updated:
+                log_action(
+                    action="customer_risk_status_changed",
+                    details=f"customer_id={customer_id}; new={_final_risk}; pep={_is_pep}",
+                    analyst_id=_aid2,
+                    module="kyc_screening",
+                    event_type="customer_risk_status_changed",
+                    entity_type="customer",
+                    entity_id=customer_id,
+                    actor_role=_arole2,
+                    payload={"new_risk": _final_risk, "is_pep": _is_pep, "reason": _final_reason},
+                )
+                st.rerun()
+            st.error("Update failed.")
+
+    if st.button("Close", key=f"detail_close_{customer_id}"):
+        st.session_state.pop("kyc_view_customer_id", None)
+        st.rerun()
+
+
 # ── Sanctions Banner ──────────────────────────────────────────────────────────
 _sync = st.session_state.get("mas_sync_result") or get_last_sync() or {}
 _sync_status = _sync.get("status", "unknown")
@@ -138,7 +669,7 @@ _STATUS_META = {
 _b_color, _b_label, _b_desc = _STATUS_META.get(_sync_status, ("#888", "Unknown", "Sync status could not be determined."))
 
 with st.container(border=True):
-    _b1, _b2, _b3, _b4 = st.columns([0.4, 5, 1.2, 0.8])
+    _b1, _b2, _b3, _b4 = st.columns([0.4, 4.8, 1.2, 1.0])
     _b1.markdown(
         f"<div style='width:12px;height:12px;border-radius:50%;background:{_b_color};margin-top:8px'></div>",
         unsafe_allow_html=True,
@@ -180,247 +711,197 @@ with _tab_registry:
         (_m3, "Medium",            int(customers["RiskStatus"].astype(str).str.lower().eq("medium").sum()),                          "#fdd835"),
         (_m4, "High",              int(customers["RiskStatus"].astype(str).str.lower().eq("high").sum()),                            "#fb8c00"),
         (_m5, "Critical",          int(customers["RiskStatus"].astype(str).str.lower().eq("critical").sum()),                        "#f44336"),
-        (_m6, "Sanctions Pending", int(customers["SanctionsReview"].astype(str).eq(SANCTIONS_REVIEW_PENDING).sum()),                 "#888"),
+        (_m6, "Sanc. Pending", int(customers["SanctionsReview"].astype(str).eq(SANCTIONS_REVIEW_PENDING).sum()), "#888"),
     ]
     for _mcol, _mlabel, _mval, _mcolor in _kpi_data:
         with _mcol:
             with st.container(border=True):
                 st.markdown(
-                    f"<div style='text-align:center;padding:6px 0'>"
-                    f"<div style='font-size:11px;color:#666;text-transform:uppercase;"
-                    f"letter-spacing:1px;margin-bottom:6px'>{_mlabel}</div>"
-                    f"<div style='font-size:28px;font-weight:700;color:{_mcolor}'>{_mval}</div>"
+                    f"<div class='kyc-kpi-card'>"
+                    f"<div class='kyc-kpi-label'>{_mlabel}</div>"
+                    f"<div class='kyc-kpi-value' style='color:{_mcolor}'>{_mval:,}</div>"
                     f"</div>",
                     unsafe_allow_html=True,
                 )
 
-    _col_enrol, _col_table = st.columns([2, 3], gap="medium")
+    _success = st.session_state.pop("kyc_enrol_success", None)
+    if _success:
+        st.success(_success)
 
-    # ── Left: Enrolment form ──────────────────────────────────────────────────
-    with _col_enrol:
-        with st.container(border=True):
-            st.markdown("**Enrol New Customer**")
-            st.caption("Customer ID is auto-assigned. Sanctions screening runs on submission.")
+    if "kyc_applied_filters" not in st.session_state:
+        st.session_state["kyc_applied_filters"] = {
+            "search": "",
+            "risk": "All",
+            "type": "All",
+            "fatf": "All",
+            "page_size": KYC_PAGE_SIZE_DEFAULT,
+        }
+    if "kyc_page" not in st.session_state:
+        st.session_state["kyc_page"] = 1
 
-            _success = st.session_state.pop("kyc_enrol_success", None)
-            if _success:
-                st.success(_success)
+    _applied = st.session_state["kyc_applied_filters"]
+    if "kyc_search_input" not in st.session_state:
+        st.session_state["kyc_search_input"] = _applied["search"]
+    if "kyc_filter_risk_input" not in st.session_state:
+        st.session_state["kyc_filter_risk_input"] = _applied["risk"]
+    if "kyc_filter_type_input" not in st.session_state:
+        st.session_state["kyc_filter_type_input"] = _applied["type"]
+    if "kyc_filter_fatf_input" not in st.session_state:
+        st.session_state["kyc_filter_fatf_input"] = _applied["fatf"]
+    if "kyc_page_size_input" not in st.session_state:
+        st.session_state["kyc_page_size_input"] = int(_applied["page_size"])
 
-            # Sanctions match warning state
-            _pending = st.session_state.get("kyc_pending_enrol")
-            if _pending and _pending.get("sanctions_match"):
-                _match = _pending["sanctions_match"]
-                _list_key = _match.get("list_key") or "MAS Targeted Financial Sanctions list"
-                st.warning(
-                    f"**⚠ Potential Sanctions Match**  \n"
-                    f"Match to **{_list_key}** (matched name: `{_match.get('matched_name', '')}`).  \n"
-                    f"Additional CDD is required before this relationship can proceed."
-                )
-                st.write(f"Pending enrolment: **{_pending['FullName']}** — Account **{_pending['AccountNo']}**")
-                _wc1, _wc2 = st.columns(2)
-                if _wc1.button("Register with Pending Review", type="primary", use_container_width=True):
-                    _pending["sanctions_warning_acknowledged"] = True
-                    try:
-                        _complete_enrolment(_pending)
-                        st.rerun()
-                    except ValueError as exc:
-                        st.error(str(exc))
-                if _wc2.button("Cancel Enrolment", use_container_width=True):
-                    st.session_state.pop("kyc_pending_enrol", None)
-                    st.rerun()
-            else:
-                with st.form("enrol_form", clear_on_submit=False):
-                    _fc1, _fc2 = st.columns(2)
-                    _full_name  = _fc1.text_input("Full Name *",      placeholder="Legal name as on ID")
-                    _account_no = _fc2.text_input("Account Number *", placeholder="e.g. SG-0041-8812")
-                    _address    = _fc1.text_input("Address *",        placeholder="Residential address")
-                    _contact_no = _fc2.text_input("Contact Number *", placeholder="+65 9000 0000")
-                    _risk_indicators = st.multiselect(
-                        "Risk Indicators",
-                        [
-                            "PEP (Politically Exposed Person)",
-                            "High-risk jurisdiction",
-                            "Adverse media",
-                            "Complex ownership structure",
-                            "Cash-intensive business",
-                            "Non-profit / NGO",
-                        ],
-                        help="PEP → Critical; any other indicator → High.",
-                    )
-                    _flag_reason = st.text_input(
-                        "Flagging Reason",
-                        placeholder="Required if indicator selected",
-                    )
-                    _comments = st.text_area("Comments", height=70, placeholder="Optional notes")
-                    _submitted = st.form_submit_button("Enrol Customer", type="primary", use_container_width=True)
+    _toolbar_l, _toolbar_r = st.columns([2, 1])
+    with _toolbar_l:
+        st.text_input(
+            "Search",
+            placeholder="Search",
+            label_visibility="collapsed",
+            key="kyc_search_input",
+        )
+    with _toolbar_r:
+        if st.button("+ Enrol new customer", type="primary", use_container_width=True):
+            st.session_state.pop("kyc_pending_enrol", None)
+            _enrol_dialog()
 
-                if _submitted:
-                    if not _full_name.strip():
-                        st.error("Full Name is required.")
-                    elif not _account_no.strip():
-                        st.error("Account Number is required.")
-                    elif not _address.strip():
-                        st.error("Address is required.")
-                    elif not _contact_no.strip():
-                        st.error("Contact Number is required.")
-                    else:
-                        _payload = {
-                            "FullName": _full_name.strip(),
-                            "AccountNo": _account_no.strip(),
-                            "Address": _address.strip(),
-                            "ContactNo": _contact_no.strip(),
-                            "Comments": _comments.strip(),
-                            "risk_indicators": _risk_indicators,
-                            "flag_reason": _flag_reason.strip(),
-                        }
-                        _match_info = screen_name(_full_name)
-                        if _match_info.get("matched"):
-                            _payload["sanctions_match"] = _match_info
-                            st.session_state["kyc_pending_enrol"] = _payload
-                            st.rerun()
-                        else:
-                            try:
-                                _complete_enrolment(_payload)
-                                st.rerun()
-                            except ValueError as exc:
-                                st.error(str(exc))
+    _filter_risk, _filter_type, _filter_fatf, _page_size_col, _filter_btn = st.columns([1, 1, 1, 1, 0.7])
+    with _filter_risk:
+        st.markdown("<div class='kyc-filter-label'>Risk level</div>", unsafe_allow_html=True)
+        st.selectbox(
+            "Risk level",
+            ["All", *CUSTOMER_RISK_STATUSES],
+            label_visibility="collapsed",
+            key="kyc_filter_risk_input",
+        )
+    with _filter_type:
+        st.markdown("<div class='kyc-filter-label'>Customer type</div>", unsafe_allow_html=True)
+        st.selectbox(
+            "Customer type",
+            ["All", CUSTOMER_TYPE_INDIVIDUAL, CUSTOMER_TYPE_CORPORATE],
+            label_visibility="collapsed",
+            key="kyc_filter_type_input",
+        )
+    with _filter_fatf:
+        st.markdown("<div class='kyc-filter-label'>FATF list</div>", unsafe_allow_html=True)
+        st.selectbox(
+            "FATF list",
+            ["All", "Any FATF", "Black", "EDD", "Grey"],
+            label_visibility="collapsed",
+            key="kyc_filter_fatf_input",
+        )
+    with _page_size_col:
+        st.markdown("<div class='kyc-filter-label'>Rows per page</div>", unsafe_allow_html=True)
+        st.selectbox(
+            "Rows per page",
+            [25, 50, 100, 200],
+            label_visibility="collapsed",
+            key="kyc_page_size_input",
+        )
+    with _filter_btn:
+        st.markdown("<div class='kyc-filter-label'>&nbsp;</div>", unsafe_allow_html=True)
+        if st.button("Apply filters", type="primary", use_container_width=True):
+            st.session_state["kyc_applied_filters"] = {
+                "search": st.session_state.get("kyc_search_input", "").strip(),
+                "risk": st.session_state.get("kyc_filter_risk_input", "All"),
+                "type": st.session_state.get("kyc_filter_type_input", "All"),
+                "fatf": st.session_state.get("kyc_filter_fatf_input", "All"),
+                "page_size": int(st.session_state.get("kyc_page_size_input", KYC_PAGE_SIZE_DEFAULT)),
+            }
+            st.session_state["kyc_page"] = 1
+            st.rerun()
 
-    # ── Right: Customer table + inline risk manager ───────────────────────────
-    with _col_table:
-        with st.container(border=True):
-            _th1, _th2 = st.columns([3, 1])
-            _th1.markdown("**Customer Database**")
-            _th2.markdown(
-                f"<div style='text-align:right;color:#555;font-size:12px;padding-top:4px'>"
-                f"{len(customers)} customers</div>",
-                unsafe_allow_html=True,
+    _applied = st.session_state["kyc_applied_filters"]
+    _search = _applied["search"]
+    _risk_filter = _applied["risk"]
+    _type_filter = _applied["type"]
+    _fatf_filter = _applied["fatf"]
+    _page_size = int(_applied["page_size"])
+
+    with st.container(border=True):
+        _th1, _th2 = st.columns([4, 1])
+        _th1.markdown("**Customer database**")
+        _th2.markdown(
+            f"<div style='text-align:right;color:#555;font-size:12px;padding-top:6px'>"
+            f"{len(customers):,} enrolled</div>",
+            unsafe_allow_html=True,
+        )
+
+        _filtered = search_kyc_customers(
+            customers,
+            _search,
+            risk_filter=_risk_filter,
+            type_filter=_type_filter,
+            fatf_filter=_fatf_filter,
+        )
+        _page_df, _page_num, _total_pages, _total_matches = paginate_kyc_customers(
+            _filtered,
+            st.session_state["kyc_page"],
+            page_size=_page_size,
+        )
+        st.session_state["kyc_page"] = _page_num
+
+        _filters_active = (
+            _search.strip()
+            or _risk_filter != "All"
+            or _type_filter != "All"
+            or _fatf_filter != "All"
+        )
+        if _filters_active:
+            st.caption(
+                f"**{_total_matches:,}** match"
+                f"{'es' if _total_matches != 1 else ''}"
+                + (f" · page **{_page_num}** of **{_total_pages}**" if _total_pages else "")
+            )
+        else:
+            st.caption(
+                f"Showing page **{_page_num}** of **{_total_pages}** "
+                f"({min(_page_size, _total_matches):,} of {_total_matches:,} customers)"
             )
 
-            _search = st.text_input(
-                "", placeholder="🔍  Search by name, ID, or account…",
-                label_visibility="collapsed",
-            )
-            _view = customers.copy()
-            if _search.strip():
-                _needle = _search.strip().lower()
-                _view = _view[
-                    _view["FullName"].astype(str).str.lower().str.contains(_needle)
-                    | _view["id"].astype(str).str.lower().str.contains(_needle)
-                    | _view["AccountNo"].astype(str).str.lower().str.contains(_needle)
-                ]
+        st.caption("Click anywhere on a row to open the full KYC profile.")
 
-            # Table header
-            _hc = st.columns([2.2, 1.8, 1, 1, 1.5, 1.5])
-            for _hcol, _hlabel in zip(_hc, ["NAME", "ACCOUNT", "RISK", "CDD", "SANCTIONS", "ACTIONS"]):
+        if _total_matches == 0:
+            st.info("No customers match your search or filters.")
+        else:
+            _hdr = st.columns(KYC_TABLE_COL_WEIGHTS, gap="small")
+            _header_labels = ["Name / ID", "Account", "Type", "Risk", "CDD", "Sanc."]
+            for _i, (_hcol, _htext) in enumerate(zip(_hdr, _header_labels)):
+                _align = "center" if _i >= 2 else "flex-start"
                 _hcol.markdown(
-                    f"<span style='font-size:11px;font-weight:700;color:#555;"
-                    f"text-transform:uppercase;letter-spacing:0.8px'>{_hlabel}</span>",
+                    f"<div class='kyc-th kyc-th-{_i}' style='justify-content:{_align}'>"
+                    f"{_htext}</div>",
                     unsafe_allow_html=True,
                 )
-            st.markdown("<hr style='border-color:#1e2130;margin:4px 0 8px 0'>", unsafe_allow_html=True)
 
-            if _view.empty:
-                st.info("No customers match your search.")
-            else:
-                for _, _row in _view.iterrows():
-                    _cid     = str(_row["id"])
-                    _risk    = str(_row.get("RiskStatus", "Low"))
-                    _sanc    = str(_row.get("SanctionsReview", "—"))
-                    _open_key = f"risk_open_{_cid}"
+            for _, _row in _page_df.iterrows():
+                _render_kyc_table_row(_row)
 
-                    _rc = st.columns([2.2, 1.8, 1, 1, 1.5, 1.5])
-                    _rc[0].markdown(
-                        f"**{_row['FullName']}**  \n"
-                        f"<span style='font-size:11px;color:#555'>{_cid}</span>",
-                        unsafe_allow_html=True,
-                    )
-                    _rc[1].markdown(
-                        f"<span style='font-size:12px;color:#ccc'>`{_row['AccountNo']}`</span>",
-                        unsafe_allow_html=True,
-                    )
-                    _rc[2].markdown(_risk_badge(_risk), unsafe_allow_html=True)
-                    _rc[3].markdown(
-                        f"<span style='font-size:12px;color:#aaa'>{_row.get('CDDLevel', '—')}</span>",
-                        unsafe_allow_html=True,
-                    )
-                    _rc[4].markdown(_sanctions_badge(_sanc), unsafe_allow_html=True)
+            _nav1, _nav2, _nav3, _nav4, _nav5 = st.columns([1, 1, 2, 1, 1])
+            with _nav1:
+                if st.button("⏮ First", disabled=_page_num <= 1, use_container_width=True):
+                    st.session_state["kyc_page"] = 1
+                    st.rerun()
+            with _nav2:
+                if st.button("◀ Prev", disabled=_page_num <= 1, use_container_width=True):
+                    st.session_state["kyc_page"] = max(1, _page_num - 1)
+                    st.rerun()
+            with _nav3:
+                st.markdown(
+                    f"<div style='text-align:center;padding-top:8px;color:#888;font-size:13px'>"
+                    f"Page {_page_num} of {_total_pages}</div>",
+                    unsafe_allow_html=True,
+                )
+            with _nav4:
+                if st.button("Next ▶", disabled=_page_num >= _total_pages, use_container_width=True):
+                    st.session_state["kyc_page"] = min(_total_pages, _page_num + 1)
+                    st.rerun()
+            with _nav5:
+                if st.button("Last ⏭", disabled=_page_num >= _total_pages, use_container_width=True):
+                    st.session_state["kyc_page"] = _total_pages
+                    st.rerun()
 
-                    _btn_label = "▲ Close" if st.session_state.get(_open_key) else "Manage Risk"
-                    if _rc[5].button(_btn_label, key=f"btn_{_cid}", use_container_width=True):
-                        st.session_state[_open_key] = not st.session_state.get(_open_key, False)
-                        st.rerun()
-
-                    # Inline risk manager
-                    if st.session_state.get(_open_key):
-                        with st.container(border=True):
-                            st.markdown(
-                                f"<span style='font-size:11px;font-weight:700;color:#aaa;"
-                                f"text-transform:uppercase;letter-spacing:1px'>"
-                                f"Manage Risk — {_row['FullName']}</span>",
-                                unsafe_allow_html=True,
-                            )
-                            _cur_risk = str(_row.get("RiskStatus", "Low"))
-                            _cur_pep  = str(_row.get("IsPEP", "")).strip().lower() == "yes"
-                            _cur_sm   = str(_row.get("SMApprovalStatus", ""))
-
-                            if _cur_sm == SM_APPROVAL_PENDING:
-                                st.warning("Pending Senior Management approval.")
-
-                            _rmc1, _rmc2 = st.columns(2)
-                            _new_risk = _rmc1.selectbox(
-                                "Risk Status", CUSTOMER_RISK_STATUSES,
-                                index=CUSTOMER_RISK_STATUSES.index(_cur_risk) if _cur_risk in CUSTOMER_RISK_STATUSES else 0,
-                                key=f"risk_sel_{_cid}",
-                            )
-                            _reason_opts = ["Manual", "PEP", "High-risk jurisdiction", "Complex profile", "Other"]
-                            _reason = _rmc2.selectbox("Reason", _reason_opts, key=f"reason_{_cid}")
-                            _custom_reason = ""
-                            if _reason == "Other":
-                                _custom_reason = st.text_input("Specify reason", key=f"custom_reason_{_cid}")
-                            _is_pep = st.checkbox(
-                                "Flag as PEP (Politically Exposed Person)",
-                                value=_cur_pep, key=f"pep_{_cid}",
-                            )
-
-                            _final_risk   = RISK_CRITICAL if _is_pep else _new_risk
-                            _final_reason = FLAG_REASON_PEP if _is_pep else (_custom_reason.strip() if _reason == "Other" else _reason)
-
-                            if _is_pep and _new_risk != RISK_CRITICAL:
-                                st.info("Flagging as PEP will set risk to Critical.")
-
-                            _sv, _cl = st.columns(2)
-                            if _sv.button("Save", key=f"save_{_cid}", type="primary", use_container_width=True):
-                                _aid2, _arole2 = get_current_analyst()
-                                _updated = set_customer_risk_status(
-                                    customer_id=_cid, new_status=_final_risk,
-                                    actor_id=_aid2, reason=_final_reason,
-                                    is_pep=True if _is_pep else (False if not _cur_pep else None),
-                                )
-                                if _updated:
-                                    log_action(
-                                        action="customer_risk_status_changed",
-                                        details=f"customer_id={_cid}; old={_cur_risk}; new={_final_risk}; pep={_is_pep}",
-                                        analyst_id=_aid2, module="kyc_screening",
-                                        event_type="customer_risk_status_changed", entity_type="customer",
-                                        entity_id=_cid, actor_role=_arole2,
-                                        payload={"old_risk": _cur_risk, "new_risk": _final_risk,
-                                                 "is_pep": _is_pep, "reason": _final_reason},
-                                    )
-                                    st.session_state[_open_key] = False
-                                    st.rerun()
-                                else:
-                                    st.error("Update failed.")
-                            if _cl.button("Cancel", key=f"cancel_{_cid}", use_container_width=True):
-                                st.session_state[_open_key] = False
-                                st.rerun()
-
-                    st.markdown(
-                        "<hr style='border-color:#1e2130;margin:2px 0'>",
-                        unsafe_allow_html=True,
-                    )
-
-                if _search.strip():
-                    st.caption(f"Showing {len(_view)} of {len(customers)} customers")
+    if st.session_state.get("kyc_view_customer_id"):
+        _customer_detail_dialog(st.session_state["kyc_view_customer_id"])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -478,6 +959,7 @@ with _tab_scoring:
                 _feat["rf_prediction"]            = _pred
                 _feat["risk_score"]               = _risk_prob
                 _feat["risk_threshold"]           = _threshold
+                _feat = apply_risk_tier(_feat)
                 _feat["prediction_wrong"]         = ""
                 _feat["prediction_feedback_reason"] = ""
                 _feat = ensure_scored_defaults(_feat)
@@ -550,6 +1032,10 @@ with _tab_scoring:
                     f" &nbsp;·&nbsp; Model: {_model_label}"
                     f" &nbsp;·&nbsp; Threshold: {_meta.get('threshold', _threshold)}"
                 )
+                st.caption(
+                    "MAS red-flag features active: "
+                    + ", ".join(RED_FLAG_COLS)
+                )
 
                 # Summary metrics
                 _sm1, _sm2, _sm3, _sm4 = st.columns(4)
@@ -570,7 +1056,7 @@ with _tab_scoring:
                 st.markdown("**Risk Tier Breakdown**")
                 _tier_counts = _meta.get("tier_counts", _feat_display["risk_tier"].value_counts().to_dict())
                 _max_count   = max(_tier_counts.values(), default=1) or 1
-                _tier_colors = {"Critical": "#f44336", "High": "#fb8c00", "Medium": "#fdd835", "Low": "#64dd17"}
+                _tier_colors = {"High": "#f44336", "Medium": "#fb8c00", "Low": "#64dd17"}
                 _bars_html   = ""
                 for _tier, _color in _tier_colors.items():
                     _cnt = _tier_counts.get(_tier, 0)

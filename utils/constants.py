@@ -74,10 +74,9 @@ OFF_HOURS_END   = 22
 
 # --- UI display ---
 RISK_TIER_COLORS: dict[str, str] = {
-    "Critical": "#f44336",
-    "High":     "#fb8c00",
-    "Medium":   "#fdd835",
-    "Low":      "#cfd8dc",
+    "High":   "#f44336",
+    "Medium": "#fb8c00",
+    "Low":    "#66bb6a",
 }
 ALERT_QUEUE_DISPLAY_LIMIT        = 200
 RELATED_TRANSACTIONS_WINDOW_DAYS = 30

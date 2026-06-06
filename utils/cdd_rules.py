@@ -9,6 +9,14 @@ and whether a sanctions name match is still pending review.
 """
 from __future__ import annotations
 
+from utils.fatf_jurisdictions import (
+    FATF_CATEGORY_BLACK,
+    FATF_CATEGORY_EDD,
+    FATF_CATEGORY_GREY,
+    fatf_cdd_impact,
+    promote_cdd,
+    promote_risk,
+)
 from utils.kyc_store import (
     CDD_ENHANCED,
     CDD_SIMPLIFIED,
@@ -33,7 +41,19 @@ def _normalize(value: str | None, default: str) -> str:
     return text if text else default
 
 
-def recommend_risk_status(current_risk: str, top_txn_tier: str) -> str:
+def _fatf_min_risk(category: str) -> str:
+    return str(fatf_cdd_impact(category).get("min_risk", RISK_LOW))
+
+
+def _fatf_min_cdd(category: str) -> str:
+    return str(fatf_cdd_impact(category).get("min_cdd", CDD_SIMPLIFIED))
+
+
+def recommend_risk_status(
+    current_risk: str,
+    top_txn_tier: str,
+    fatf_category: str = "",
+) -> str:
     """
     Promote (never demote) the KYC RiskStatus based on a flagged transaction tier.
 
@@ -59,7 +79,10 @@ def recommend_risk_status(current_risk: str, top_txn_tier: str) -> str:
         target = current
 
     if _RISK_RANK.get(target, 0) > _RISK_RANK.get(current, 0):
-        return target
+        current = target
+
+    if fatf_category in {FATF_CATEGORY_BLACK, FATF_CATEGORY_EDD, FATF_CATEGORY_GREY}:
+        current = promote_risk(current, _fatf_min_risk(fatf_category))
     return current
 
 
@@ -68,6 +91,7 @@ def recommend_cdd_level(
     risk_status: str,
     top_txn_tier: str | None = None,
     sanctions_pending: bool = False,
+    fatf_category: str = "",
 ) -> str:
     """
     Decide the recommended CDD level. Returns the higher of the current level
@@ -89,6 +113,9 @@ def recommend_cdd_level(
     else:
         target = CDD_SIMPLIFIED
 
+    if fatf_category in {FATF_CATEGORY_BLACK, FATF_CATEGORY_EDD, FATF_CATEGORY_GREY}:
+        target = promote_cdd(target, _fatf_min_cdd(fatf_category))
+
     if _CDD_RANK.get(target, 0) > _CDD_RANK.get(current, 0):
         return target
     return current
@@ -102,10 +129,12 @@ def recommend_for_case(
     """Convenience wrapper used by the Case Investigation page."""
     current_cdd = (kyc_row or {}).get("CDDLevel", CDD_SIMPLIFIED)
     risk_status = (kyc_row or {}).get("RiskStatus", RISK_LOW)
-    promoted_risk = recommend_risk_status(risk_status, txn_risk_tier)
+    fatf_category = str((kyc_row or {}).get("FATFListCategory", ""))
+    promoted_risk = recommend_risk_status(risk_status, txn_risk_tier, fatf_category=fatf_category)
     return recommend_cdd_level(
         current_cdd=current_cdd,
         risk_status=promoted_risk,
         top_txn_tier=txn_risk_tier,
         sanctions_pending=sanctions_pending,
+        fatf_category=fatf_category,
     )

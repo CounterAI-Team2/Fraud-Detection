@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -15,7 +15,7 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold, train_test_split
 from sklearn.tree import DecisionTreeClassifier
 
 
@@ -168,7 +168,49 @@ def _clf_metrics(y_true: pd.Series, y_pred: np.ndarray, y_prob: np.ndarray) -> d
     }
 
 
-def train_models(df: pd.DataFrame, random_state: int = 147) -> Tuple[TrainedModels, Dict]:
+def tune_rf_hyperparameters(
+    df: pd.DataFrame,
+    random_state: int = 147,
+    n_iter: int = 40,
+    cv_folds: int = 5,
+    scoring: str = "f1",
+    n_jobs: int = 1,
+) -> tuple[dict[str, Any], float]:
+    validate_dataset(df, require_target=True)
+    feat = engineer_features(df)
+    y = pd.to_numeric(feat["Is_laundering"], errors="coerce").fillna(0).astype(int)
+    x = _to_model_matrix(feat)
+
+    param_dist = {
+        "n_estimators": [200, 400, 600, 800],
+        "max_depth": [None, 8, 12, 16, 24],
+        "min_samples_split": [2, 5, 10, 20],
+        "min_samples_leaf": [1, 2, 4, 8],
+        "max_features": ["sqrt", "log2", 0.3, 0.5, 0.8],
+        "class_weight": ["balanced", "balanced_subsample", None],
+    }
+
+    rf = RandomForestClassifier(random_state=random_state)
+    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
+    search = RandomizedSearchCV(
+        rf,
+        param_distributions=param_dist,
+        n_iter=n_iter,
+        scoring=scoring,
+        cv=cv,
+        n_jobs=n_jobs,
+        verbose=1,
+        random_state=random_state,
+    )
+    search.fit(x, y)
+    return search.best_params_, float(search.best_score_)
+
+
+def train_models(
+    df: pd.DataFrame,
+    random_state: int = 147,
+    rf_overrides: dict[str, Any] | None = None,
+) -> Tuple[TrainedModels, Dict]:
     validate_dataset(df, require_target=True)
 
     # 1. Split raw data FIRST to prevent group-by aggregation and encoding leakage
@@ -206,7 +248,10 @@ def train_models(df: pd.DataFrame, random_state: int = 147) -> Tuple[TrainedMode
     x_train_bal = train_bal.drop(columns=["target"])
 
     # 5. Train
-    rf = RandomForestClassifier(n_estimators=200, random_state=random_state, class_weight="balanced")
+    rf_params = {"n_estimators": 200, "class_weight": "balanced"}
+    if rf_overrides:
+        rf_params.update(rf_overrides)
+    rf = RandomForestClassifier(random_state=random_state, **rf_params)
     cart = DecisionTreeClassifier(max_depth=8, random_state=random_state, class_weight="balanced")
     logit = LogisticRegression(max_iter=2000, class_weight="balanced")
     rf.fit(x_train_bal, y_train_bal)
@@ -229,6 +274,7 @@ def train_models(df: pd.DataFrame, random_state: int = 147) -> Tuple[TrainedMode
         "rf": _clf_metrics(y_test, rf_pred, rf_prob),
         "cart": _clf_metrics(y_test, cart_pred, cart_prob),
         "logit": _clf_metrics(y_test, logit_pred, logit_prob),
+        "rf_params": rf.get_params(),
     }
 
     models = TrainedModels(

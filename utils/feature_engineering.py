@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 
 from utils.constants import OFF_HOURS_END, OFF_HOURS_START
+from utils.fatf_jurisdictions import is_fatf_grey_bank_location, is_fatf_high_risk_bank_location
 
 SAML_REQUIRED_COLUMNS = [
     "Time",
@@ -39,6 +40,20 @@ CATEGORICAL_FEATURES = [
     "Receiver_bank_location",
 ]
 
+RED_FLAG_COLS = [
+    "smurfing_flag",
+    "uturn_flag",
+    "rapid_movement_flag",
+    "dormant_spike_flag",
+    "high_risk_jurisdiction",
+    "fatf_grey_jurisdiction",
+    "profile_inconsistency_flag",
+    "cdd_threshold_breach",
+    "cross_border",
+    "cross_currency",
+    "is_off_hours",
+]
+
 
 def validate_schema(df: pd.DataFrame) -> tuple[bool, list[str]]:
     missing = [c for c in SAML_REQUIRED_COLUMNS if c not in df.columns]
@@ -67,6 +82,43 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     out["day_of_week"] = parsed_date.dt.dayofweek.fillna(0).astype(int)
     out["is_off_hours"] = ((out["hour"] < OFF_HOURS_START) | (out["hour"] >= OFF_HOURS_END)).astype(int)
 
+    # --- MAS red-flag engineered fields ---
+    daily_sender_total = out.groupby([out["Sender_account"], out["Date"]])["Amount"].transform("sum")
+    out["daily_sender_total"] = daily_sender_total
+    out["smurfing_flag"] = ((out["Amount"] < 20000) & (daily_sender_total >= 20000)).astype(int)
+
+    out["uturn_flag"] = (
+        (out["Sender_bank_location"] == out["Receiver_bank_location"])
+        & (out["Payment_type"] == "Cross-border")
+    ).astype(int)
+
+    fanin_thresh = out["receiver_unique_senders"].quantile(0.90)
+    fanout_thresh = out["sender_unique_receivers"].quantile(0.90)
+    out["rapid_movement_flag"] = (
+        (out["receiver_unique_senders"] > fanin_thresh)
+        & (out["sender_unique_receivers"] > fanout_thresh)
+    ).astype(int)
+
+    low_activity_thresh = out["sender_txn_count"].quantile(0.25)
+    high_amount_thresh = out["Amount"].quantile(0.85)
+    out["dormant_spike_flag"] = (
+        (out["sender_txn_count"] <= low_activity_thresh) & (out["Amount"] >= high_amount_thresh)
+    ).astype(int)
+
+    out["high_risk_jurisdiction"] = (
+        out["Sender_bank_location"].isin(HIGH_RISK_COUNTRIES)
+        | out["Receiver_bank_location"].isin(HIGH_RISK_COUNTRIES)
+    ).astype(int)
+
+    out["amount_zscore"] = out.groupby(pd.cut(out["sender_txn_count"], bins=5, duplicates="drop"))["Amount"].transform(
+        lambda x: (x - x.mean()) / (x.std() + 1e-6)
+    )
+    out["profile_inconsistency_flag"] = (out["amount_zscore"] > 2.5).astype(int)
+
+    out["cdd_threshold_breach"] = (out["Amount"] > 20000).astype(int)
+
+    out["red_flag_score"] = out[RED_FLAG_COLS].sum(axis=1)
+
     # Convenience fields for UX and filtering
     out["transaction_id"] = out.index.astype(str)
     if "transaction_id" in df.columns:
@@ -74,6 +126,36 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
 
     out["txn_dt"] = pd.to_datetime(out["Date"].astype(str) + " " + out["Time"].astype(str), errors="coerce")
 
+    return out
+
+
+def assign_risk_tier(row: pd.Series) -> str:
+    score = row.get("red_flag_score", 0)
+    rf_flagged = row.get("rf_prediction", 0) == 1
+
+    if row.get("high_risk_jurisdiction", 0) == 1:
+        return "High"
+
+    if row.get("fatf_grey_jurisdiction", 0) == 1 and (
+        row.get("cross_border", 0) == 1 or row.get("cross_currency", 0) == 1
+    ):
+        return "Medium"
+
+    if row.get("smurfing_flag", 0) == 1:
+        return "High"
+
+    if rf_flagged and score >= 3:
+        return "High"
+
+    if rf_flagged or score >= 2:
+        return "Medium"
+
+    return "Low"
+
+
+def apply_risk_tier(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    out["risk_tier"] = out.apply(assign_risk_tier, axis=1)
     return out
 
 
