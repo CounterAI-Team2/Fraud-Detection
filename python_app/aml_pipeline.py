@@ -7,6 +7,14 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (
+    accuracy_score,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
 
@@ -16,6 +24,7 @@ REQUIRED_COLUMNS = [
     "Date",
     "Sender_account",
     "Receiver_account",
+    "Laundering_type",
     "Amount",
     "Payment_currency",
     "Received_currency",
@@ -42,33 +51,68 @@ def validate_dataset(df: pd.DataFrame, require_target: bool) -> None:
         raise ValueError("Training dataset must include Is_laundering column")
 
 
-def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
+def _engineer_row_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Row-level features only — no cross-row aggregations, safe to call on any subset."""
     out = df.copy()
-
     out["Amount"] = pd.to_numeric(out["Amount"], errors="coerce").fillna(0)
     out["amount_log"] = np.log10(out["Amount"] + 1)
-
     out["cross_currency"] = (out["Payment_currency"].astype(str) != out["Received_currency"].astype(str)).astype(int)
     out["cross_border"] = (out["Sender_bank_location"].astype(str) != out["Receiver_bank_location"].astype(str)).astype(int)
     out["double_flag"] = ((out["cross_currency"] == 1) & (out["cross_border"] == 1)).astype(int)
-
-    out["sender_txn_count"] = out.groupby("Sender_account")["Sender_account"].transform("count")
-    out["receiver_txn_count"] = out.groupby("Receiver_account")["Receiver_account"].transform("count")
-
-    out["sender_unique_receivers"] = out.groupby("Sender_account")["Receiver_account"].transform("nunique")
-    out["receiver_unique_senders"] = out.groupby("Receiver_account")["Sender_account"].transform("nunique")
-
-    out["sender_total_amount"] = out.groupby("Sender_account")["Amount"].transform("sum")
-    out["receiver_total_amount"] = out.groupby("Receiver_account")["Amount"].transform("sum")
-
     out["Time"] = out["Time"].astype(str)
     parsed_time = pd.to_datetime(out["Time"], format="%H:%M:%S", errors="coerce")
     out["hour"] = parsed_time.dt.hour.fillna(0).astype(int)
-
     out["Date"] = pd.to_datetime(out["Date"], errors="coerce")
     out["day_of_week"] = out["Date"].dt.dayofweek.fillna(0).astype(int)
     out["is_off_hours"] = ((out["hour"] < 6) | (out["hour"] >= 22)).astype(int)
+    # Laundering_type is a post-hoc investigator label (target leak) — excluded from features.
+    return out
 
+
+def _compute_group_stats(df: pd.DataFrame) -> dict:
+    """Compute aggregation lookup tables — must be called on training data only."""
+    sender_stats = df.groupby("Sender_account", as_index=False).agg(
+        sender_txn_count=("Sender_account", "count"),
+        sender_unique_receivers=("Receiver_account", "nunique"),
+        sender_total_amount=("Amount", "sum"),
+    )
+    receiver_stats = df.groupby("Receiver_account", as_index=False).agg(
+        receiver_txn_count=("Receiver_account", "count"),
+        receiver_unique_senders=("Sender_account", "nunique"),
+        receiver_total_amount=("Amount", "sum"),
+    )
+    return {
+        "sender_stats": sender_stats,
+        "receiver_stats": receiver_stats,
+        "sender_fallback": {
+            "sender_txn_count": float(sender_stats["sender_txn_count"].mean()),
+            "sender_unique_receivers": float(sender_stats["sender_unique_receivers"].mean()),
+            "sender_total_amount": float(sender_stats["sender_total_amount"].mean()),
+        },
+        "receiver_fallback": {
+            "receiver_txn_count": float(receiver_stats["receiver_txn_count"].mean()),
+            "receiver_unique_senders": float(receiver_stats["receiver_unique_senders"].mean()),
+            "receiver_total_amount": float(receiver_stats["receiver_total_amount"].mean()),
+        },
+    }
+
+
+def _apply_group_stats(df: pd.DataFrame, group_stats: dict) -> pd.DataFrame:
+    """Merge pre-computed group stats onto df; unseen accounts receive training-set means."""
+    out = df.merge(group_stats["sender_stats"], on="Sender_account", how="left")
+    out = out.merge(group_stats["receiver_stats"], on="Receiver_account", how="left")
+    for col, val in group_stats["sender_fallback"].items():
+        out[col] = out[col].fillna(val)
+    for col, val in group_stats["receiver_fallback"].items():
+        out[col] = out[col].fillna(val)
+    return out
+
+
+def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Full feature engineering for inference — group stats derived from the scoring batch itself."""
+    out = _engineer_row_features(df)
+    group_stats = _compute_group_stats(out)
+    out = _apply_group_stats(out, group_stats)
     return out
 
 
@@ -89,83 +133,110 @@ def _to_model_matrix(df: pd.DataFrame) -> pd.DataFrame:
         "Received_currency",
         "Sender_bank_location",
         "Receiver_bank_location",
+        # "Laundering_type",  # target leak — excluded
     ]
-    x = df[keep].copy()
-    x = pd.get_dummies(
-        x,
-        columns=[
+    available = [c for c in keep if c in df.columns]
+    x = df[available].copy()
+    cat_cols = [
+        c for c in [
             "Payment_type",
             "Payment_currency",
             "Received_currency",
             "Sender_bank_location",
             "Receiver_bank_location",
-        ],
-        drop_first=False,
-    )
+            # "Laundering_type",  # target leak — excluded
+        ]
+        if c in x.columns
+    ]
+    x = pd.get_dummies(x, columns=cat_cols, drop_first=False)
     return x
 
 
-def train_models(df: pd.DataFrame, random_state: int = 147) -> Tuple[TrainedModels, Dict[str, float]]:
+def _clf_metrics(y_true: pd.Series, y_pred: np.ndarray, y_prob: np.ndarray) -> dict:
+    cm = confusion_matrix(y_true, y_pred)
+    tn, fp, fn, tp = cm.ravel() if cm.shape == (2, 2) else (0, 0, 0, int(cm[0, 0]))
+    return {
+        "accuracy": round(float(accuracy_score(y_true, y_pred)), 4),
+        "precision": round(float(precision_score(y_true, y_pred, zero_division=0)), 4),
+        "recall": round(float(recall_score(y_true, y_pred, zero_division=0)), 4),
+        "f1": round(float(f1_score(y_true, y_pred, zero_division=0)), 4),
+        "auc_roc": round(float(roc_auc_score(y_true, y_prob)), 4),
+        "tp": int(tp),
+        "tn": int(tn),
+        "fp": int(fp),
+        "fn": int(fn),
+    }
+
+
+def train_models(df: pd.DataFrame, random_state: int = 147) -> Tuple[TrainedModels, Dict]:
     validate_dataset(df, require_target=True)
-    feat = engineer_features(df)
 
-    y = pd.to_numeric(feat["Is_laundering"], errors="coerce").fillna(0).astype(int)
-    x = _to_model_matrix(feat)
-
-    x_train, x_test, y_train, y_test = train_test_split(
-        x, y, test_size=0.3, random_state=random_state, stratify=y if y.nunique() > 1 else None
+    # 1. Split raw data FIRST to prevent group-by aggregation and encoding leakage
+    y_full = pd.to_numeric(df["Is_laundering"], errors="coerce").fillna(0).astype(int)
+    df_train_raw, df_test_raw, y_train, y_test = train_test_split(
+        df, y_full, test_size=0.3, random_state=random_state,
+        stratify=y_full if y_full.nunique() > 1 else None,
     )
+    df_train_raw = df_train_raw.reset_index(drop=True)
+    df_test_raw  = df_test_raw.reset_index(drop=True)
+    y_train      = y_train.reset_index(drop=True)
+    y_test       = y_test.reset_index(drop=True)
 
+    # 2. Engineer features — group stats from train only, then applied to test
+    feat_train = _engineer_row_features(df_train_raw)
+    group_stats = _compute_group_stats(feat_train)
+    feat_train = _apply_group_stats(feat_train, group_stats)
+
+    feat_test = _engineer_row_features(df_test_raw)
+    feat_test = _apply_group_stats(feat_test, group_stats)
+
+    # 3. Dummy encoding fit on train, reindexed for test (no category leakage)
+    x_train = _to_model_matrix(feat_train)
+    feature_columns = list(x_train.columns)
+    x_test = _to_model_matrix(feat_test).reindex(columns=feature_columns, fill_value=0)
+
+    # 4. Balance training set by downsampling majority class
     train_bal = pd.concat([x_train, y_train.rename("target")], axis=1)
     minority = train_bal[train_bal["target"] == 1]
     majority = train_bal[train_bal["target"] == 0]
-
     if not minority.empty and len(majority) > len(minority):
         majority = majority.sample(n=len(minority), random_state=random_state)
         train_bal = pd.concat([majority, minority], axis=0).sample(frac=1, random_state=random_state)
-
     y_train_bal = train_bal["target"].astype(int)
     x_train_bal = train_bal.drop(columns=["target"])
 
+    # 5. Train
     rf = RandomForestClassifier(n_estimators=200, random_state=random_state, class_weight="balanced")
     cart = DecisionTreeClassifier(max_depth=8, random_state=random_state, class_weight="balanced")
-    logit = LogisticRegression(max_iter=600, class_weight="balanced")
-
+    logit = LogisticRegression(max_iter=2000, class_weight="balanced")
     rf.fit(x_train_bal, y_train_bal)
     cart.fit(x_train_bal, y_train_bal)
     logit.fit(x_train_bal, y_train_bal)
 
+    # 6. Evaluate on held-out test set
     rf_pred = rf.predict(x_test)
     cart_pred = cart.predict(x_test)
     logit_pred = logit.predict(x_test)
-
-    def recall(pred: np.ndarray) -> float:
-        positives = int((y_test == 1).sum())
-        if positives == 0:
-            return 0.0
-        return float(((pred == 1) & (y_test == 1)).sum() / positives)
-
-    def flagged_rate(pred: np.ndarray) -> float:
-        return float((pred == 1).mean())
+    rf_prob = rf.predict_proba(x_test)[:, 1]
+    cart_prob = cart.predict_proba(x_test)[:, 1]
+    logit_prob = logit.predict_proba(x_test)[:, 1]
 
     metrics = {
-        "rf_test_accuracy": float(rf.score(x_test, y_test)),
-        "cart_test_accuracy": float(cart.score(x_test, y_test)),
-        "logit_test_accuracy": float(logit.score(x_test, y_test)),
-        "rf_test_recall": recall(rf_pred),
-        "cart_test_recall": recall(cart_pred),
-        "logit_test_recall": recall(logit_pred),
-        "rf_flagged_rate": flagged_rate(rf_pred),
+        "test_size": int(len(y_test)),
+        "test_positives": int((y_test == 1).sum()),
         "balanced_train_rows": int(len(x_train_bal)),
         "balanced_train_positives": int((y_train_bal == 1).sum()),
+        "rf": _clf_metrics(y_test, rf_pred, rf_prob),
+        "cart": _clf_metrics(y_test, cart_pred, cart_prob),
+        "logit": _clf_metrics(y_test, logit_pred, logit_prob),
     }
 
     models = TrainedModels(
         rf=rf,
         cart=cart,
         logit=logit,
-        feature_columns=list(x.columns),
-        means=x.mean(numeric_only=True),
+        feature_columns=feature_columns,
+        means=x_train.mean(numeric_only=True),
     )
     return models, metrics
 
