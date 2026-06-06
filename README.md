@@ -62,7 +62,3 @@ scripts/       # split_models.py and data-prep helpers
 data/          # CSV/JSON stores (auto-created at startup)
 tests/         # pytest suite
 ```
-
-## More
-
-- [MAS_626_IMPLEMENTATION_PLAN.md](MAS_626_IMPLEMENTATION_PLAN.md) — regulatory compliance roadmap.
