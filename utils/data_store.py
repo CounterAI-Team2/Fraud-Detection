@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import csv
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -210,10 +211,14 @@ def write_csv_store(path: Path, df: pd.DataFrame, columns: list[str] | None = No
 
 
 def append_csv_row(path: Path, row: dict[str, Any], columns: list[str]) -> dict[str, Any]:
-    df = read_csv_store(path, columns)
     normalized_row = {column: row.get(column, "") for column in columns}
-    df = pd.concat([df, pd.DataFrame([normalized_row])], ignore_index=True)
-    write_csv_store(path, df, columns)
+    _ensure_parent(path)
+    file_exists = path.exists() and path.stat().st_size > 0
+    with path.open("a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=columns)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(normalized_row)
     return normalized_row
 
 

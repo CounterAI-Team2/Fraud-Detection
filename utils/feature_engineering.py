@@ -106,8 +106,12 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     ).astype(int)
 
     out["high_risk_jurisdiction"] = (
-        out["Sender_bank_location"].isin(HIGH_RISK_COUNTRIES)
-        | out["Receiver_bank_location"].isin(HIGH_RISK_COUNTRIES)
+        out["Sender_bank_location"].astype(str).map(is_fatf_high_risk_bank_location)
+        | out["Receiver_bank_location"].astype(str).map(is_fatf_high_risk_bank_location)
+    ).astype(int)
+    out["fatf_grey_jurisdiction"] = (
+        out["Sender_bank_location"].astype(str).map(is_fatf_grey_bank_location)
+        | out["Receiver_bank_location"].astype(str).map(is_fatf_grey_bank_location)
     ).astype(int)
 
     out["amount_zscore"] = out.groupby(pd.cut(out["sender_txn_count"], bins=5, duplicates="drop"))["Amount"].transform(

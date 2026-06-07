@@ -29,6 +29,10 @@ KYC_SEARCH_COLUMNS = [
     "CompanyRegistrationNo",
     "FATFJurisdiction",
     "FATFListCategory",
+    # Transaction monitoring linkage fields.
+    "flagged_transaction_count",
+    "last_reviewed",
+    "review_notes",
 ]
 
 KYC_PAGE_SIZE_DEFAULT = 50
@@ -64,6 +68,9 @@ KYC_COLUMNS = [
     "SanctionsReview",
     "LastCDDReviewAt",
     "Comments",
+    "flagged_transaction_count",
+    "last_reviewed",
+    "review_notes",
     "IsPEP",
     "FlaggedBy",
     "FlaggedReason",
@@ -732,6 +739,58 @@ def get_kyc_by_account(account_no: str) -> dict[str, str] | None:
     if match.empty:
         return None
     return match.iloc[0].to_dict()
+
+
+def get_customer_by_account(account_no: str) -> dict[str, str] | None:
+    """Return a KYC customer by AccountNo using string-safe comparison."""
+    return get_kyc_by_account(str(account_no).strip() if account_no is not None else "")
+
+
+def escalate_customer_risk(account_no: str, new_risk_status: str, new_cdd_level: str, reason: str) -> bool:
+    """
+    Promote a KYC customer from transaction monitoring without downgrading risk.
+
+    Returns False when no KYC row exists for the account.
+    """
+    if not account_no:
+        return False
+
+    customers = get_kyc_customers()
+    needle = str(account_no).strip()
+    mask = customers["AccountNo"].astype(str).str.strip() == needle
+    if not mask.any():
+        return False
+
+    idx = customers.index[mask][0]
+    current_risk = str(customers.at[idx, "RiskStatus"] or RISK_LOW)
+    requested_risk = str(new_risk_status or RISK_LOW)
+    rank = {RISK_LOW: 0, RISK_MEDIUM: 1, RISK_HIGH: 2, RISK_CRITICAL: 3}
+
+    count_raw = str(customers.at[idx, "flagged_transaction_count"]).strip()
+    try:
+        flag_count = int(float(count_raw)) if count_raw else 0
+    except ValueError:
+        flag_count = 0
+
+    today = datetime.now(UTC).date().isoformat()
+    note = str(reason or "").strip()[:200]
+    prior_notes = str(customers.at[idx, "review_notes"]).strip()
+    updated_notes = f"{today}: {note}" if note else f"{today}: Transaction monitoring review"
+    if prior_notes:
+        updated_notes = f"{prior_notes}\n{updated_notes}"
+
+    customers.at[idx, "flagged_transaction_count"] = str(flag_count + 1)
+    customers.at[idx, "last_reviewed"] = today
+    customers.at[idx, "review_notes"] = updated_notes
+    customers.at[idx, "LastCDDReviewAt"] = today
+    customers.at[idx, "Comments"] = updated_notes
+
+    if rank.get(requested_risk, 0) > rank.get(current_risk, 0):
+        customers.at[idx, "RiskStatus"] = requested_risk
+        customers.at[idx, "CDDLevel"] = new_cdd_level
+
+    save_kyc_customers(customers)
+    return True
 
 
 def get_kyc_by_id(customer_id: str) -> dict[str, str] | None:
