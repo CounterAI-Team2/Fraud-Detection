@@ -11,10 +11,12 @@ from utils.aml_services import (
     build_str_case_from_record,
     get_all_str_records,
     get_str_subject,
+    update_case_record,
     upsert_str_workflow,
 )
 from utils.audit_logger import log_action
 from utils.constants import (
+    CASE_STATUS_RESOLVED,
     INSTITUTION_NAME,
     STR_GATE_ROLE_LABEL,
     STR_REASON_CODES,
@@ -426,6 +428,20 @@ with tab_workflow:
                                 "reference_number": ref_no, "grounds": grounds,
                             })
                             upsert_str_workflow(str_record, grounds, STR_STATUS_ARCHIVED, {**_form_updates, "reference_number": ref_no})
+                            # Close the loop: resolve the originating case now that the STR is filed,
+                            # so it stops counting as an open case on the dashboard.
+                            _case_id = str(str_case.get("case_id", ""))
+                            if _case_id:
+                                update_case_record(_case_id, {
+                                    "status": CASE_STATUS_RESOLVED,
+                                    "resolution": f"STR filed — {ref_no}",
+                                    "str_required": True,
+                                })
+                                log_action(action="case_resolved_str_filed", transaction_id=str_case["transaction_id"],
+                                           details=f"case_id={_case_id}; reference_number={ref_no}", analyst_id=actor_id,
+                                           module="cdd_module", event_type="case_resolved_str_filed", entity_type="case",
+                                           entity_id=_case_id, actor_role=actor_role,
+                                           payload={"reference_number": ref_no, "status": CASE_STATUS_RESOLVED})
                             st.session_state["str_log"].append({
                                 "reference_number": ref_no, "transaction_id": str_case["transaction_id"],
                                 "rf_prediction": str_case.get("risk_score", ""), "cdd_level": str_case.get("cdd_level", ""),
