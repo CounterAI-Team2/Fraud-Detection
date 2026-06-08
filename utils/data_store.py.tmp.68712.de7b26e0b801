@@ -484,18 +484,11 @@ def append_archive_record(summary: dict[str, Any]) -> dict[str, Any]:
         "customer_id": summary.get("customer_id", ""),
         "risk_tier": summary.get("risk_tier", ""),
         "str_status": summary.get("str_status", ""),
-        "subject_name": summary.get("subject_name", "") or summary.get("customer_name", ""),
-        "reference_number": summary.get("reference_number", ""),
         "archived_at": now,
         "archived_by": summary.get("archived_by", ""),
         "summary_json": serialize_payload(summary),
     }
-    # Read-modify-write (rather than raw append) so a pre-existing archive CSV with an
-    # older, shorter header is migrated to ARCHIVE_COLUMNS instead of mis-aligning rows.
-    existing = read_csv_store(ARCHIVE_PATH, ARCHIVE_COLUMNS)
-    combined = pd.concat([existing, pd.DataFrame([row])], ignore_index=True)
-    write_csv_store(ARCHIVE_PATH, combined, ARCHIVE_COLUMNS)
-    return row
+    return append_csv_row(ARCHIVE_PATH, row, ARCHIVE_COLUMNS)
 
 
 def append_hitl_feedback(feedback_row: dict[str, Any]) -> dict[str, Any]:

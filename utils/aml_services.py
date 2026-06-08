@@ -265,6 +265,16 @@ def get_all_str_records() -> pd.DataFrame:
     return cases.sort_values("updated_at", ascending=False).reset_index(drop=True)
 
 
+_STR_CARRIED_FIELDS = [
+    "drafted_by", "drafted_role",
+    "l1_reviewer", "l1_role", "l1_reviewed_at", "l1_reason",
+    "l2_reviewer", "l2_role", "l2_reviewed_at", "l2_reason",
+    "subject_name", "subject_dob", "subject_nationality",
+    "subject_id_type", "subject_id_number", "subject_address",
+    "reason_codes", "currency",
+]
+
+
 def upsert_str_workflow(case_row: dict[str, Any], grounds: str, status: str, updates: dict[str, Any] | None = None) -> dict[str, Any]:
     payload = {
         "str_id": case_row.get("str_id", ""),
@@ -275,9 +285,65 @@ def upsert_str_workflow(case_row: dict[str, Any], grounds: str, status: str, upd
         "reference_number": case_row.get("reference_number", ""),
         "grounds": grounds,
     }
+    # Carry maker/checker identities, subject particulars and reason codes forward so
+    # they survive reloads (the loader upserts on every render without `updates`).
+    for field in _STR_CARRIED_FIELDS:
+        payload[field] = case_row.get(field, "")
     if updates:
         payload.update(updates)
     return upsert_str_case(payload)
+
+
+def get_str_subject(case: dict[str, Any]) -> dict[str, str]:
+    """Look up subject particulars from the KYC store by the sender account.
+
+    Returns the ``subject_*`` fields used on the STR form, blank when unknown.
+    """
+    from utils.kyc_store import get_kyc_by_account  # local import avoids import cycle
+
+    account = case.get("sender_account") or case.get("account_id") or ""
+    kyc = get_kyc_by_account(str(account)) or {}
+    return {
+        "subject_name": kyc.get("FullName", "") or case.get("customer_name", ""),
+        "subject_dob": kyc.get("DateOfBirth", ""),
+        "subject_nationality": kyc.get("Nationality", ""),
+        "subject_id_type": kyc.get("NationalIdType", ""),
+        "subject_id_number": kyc.get("NationalIdNumber", ""),
+        "subject_address": kyc.get("Address", ""),
+    }
+
+
+def build_str_case_from_record(record: dict[str, Any]) -> dict[str, Any]:
+    """Reconstruct a workflow ``str_case`` dict from a persisted STR record so a
+    reviewer can open an in-progress STR from the tracker (resume-from-tracker).
+
+    Banner fields are recovered from the matching case row where available.
+    """
+    case_id = str(record.get("case_id", ""))
+    cases = get_cases()
+    case_row = {}
+    if not cases.empty:
+        match = cases[cases["case_id"].astype(str) == case_id]
+        if not match.empty:
+            case_row = match.iloc[0].to_dict()
+
+    return {
+        "str_id": record.get("str_id", ""),
+        "case_id": record.get("case_id", ""),
+        "transaction_id": record.get("transaction_id", ""),
+        "customer_id": record.get("customer_id", ""),
+        "customer_name": record.get("subject_name", ""),
+        "sender_account": case_row.get("account_id", ""),
+        "receiver_account": "",
+        "payment_type": "",
+        "date": "",
+        "amount": 0,
+        "currency": record.get("currency", ""),
+        "risk_score": case_row.get("alert_score", 0) or 0,
+        "risk_tier": case_row.get("alert_tier", "") or "",
+        "cdd_level": case_row.get("cdd_level", "") or record.get("cdd_level", ""),
+        "reference_number": record.get("reference_number", ""),
+    }
 
 
 def archive_str_case(str_row: dict[str, Any], archived_by: str, summary: dict[str, Any]) -> dict[str, Any]:

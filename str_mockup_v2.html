@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>STR Generation — Hardened UX Mockup (SoD · Roles · Fileable Output)</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Inter", "Segoe UI", sans-serif; background: #0e1117; color: #e0e0e0; font-size: 14px; }
+
+  /* ── Layout ── */
+  .page { max-width: 1280px; margin: 0 auto; padding: 28px 24px; }
+  .page-title { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+  .page-caption { color: #666; font-size: 13px; margin-bottom: 20px; }
+
+  /* ── Context / role bar ── */
+  .context-bar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    border: 1px solid #1e2130; border-radius: 10px; background: #13161f; padding: 12px 18px; margin-bottom: 22px; }
+  .context-bar .ctx-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #555; }
+  .context-bar select { background: #0e1117; border: 1px solid #2a2a2a; border-radius: 6px;
+    color: #e0e0e0; font-size: 13px; padding: 6px 10px; outline: none; font-family: inherit; }
+  .ctx-userid { font-size: 13px; color: #4da6ff; font-weight: 600; }
+  .ctx-spacer { flex: 1; }
+  .ctx-hint { font-size: 11px; color: #555; }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; gap: 4px; border-bottom: 2px solid #1e2130; margin-bottom: 24px; }
+  .tab { padding: 10px 20px; cursor: pointer; font-size: 14px; font-weight: 600; color: #666;
+    border-radius: 6px 6px 0 0; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+  .tab.active { color: #4da6ff; border-bottom-color: #4da6ff; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── Workflow Stage Cards ── */
+  .stages { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+  .stage-card { border: 2px solid #2a2a2a; border-radius: 10px; background: #13161f;
+    padding: 16px 12px; text-align: center; }
+  .stage-card.done { border-color: #4caf50; background: rgba(76,175,80,0.07); }
+  .stage-card.active { border-color: #4da6ff; background: rgba(77,166,255,0.07); }
+  .stage-icon { font-size: 26px; margin-bottom: 6px; }
+  .stage-name { font-size: 13px; font-weight: 700; }
+  .stage-card.done .stage-name, .stage-card.active .stage-name { color: #fff; }
+  .stage-card .stage-name { color: #555; }
+  .stage-sub { font-size: 11px; margin-top: 4px; }
+  .stage-card.done .stage-sub { color: #4caf50; }
+  .stage-card.active .stage-sub { color: #4da6ff; }
+  .stage-card .stage-sub { color: #444; }
+  .stage-role { font-size: 10px; margin-top: 6px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* ── Case Banner ── */
+  .case-banner { border: 1px solid #1e2130; border-radius: 10px; background: #13161f;
+    padding: 14px 18px; display: flex; gap: 32px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+  .banner-item { display: flex; flex-direction: column; gap: 2px; }
+  .banner-label { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 0.8px; }
+  .banner-value { font-size: 14px; font-weight: 700; color: #e0e0e0; }
+  .banner-value.red { color: #f44336; }
+  .banner-value.orange { color: #fb8c00; }
+  .banner-value.blue { color: #4da6ff; }
+  .banner-divider { width: 1px; background: #1e2130; align-self: stretch; }
+
+  /* ── Main Two-Column Layout ── */
+  .main-grid { display: grid; grid-template-columns: 1fr 380px; gap: 20px; align-items: start; }
+
+  /* ── Containers ── */
+  .card { border: 1px solid #1e2130; border-radius: 10px; background: #13161f; padding: 20px; }
+  .card-title { font-size: 14px; font-weight: 700; margin-bottom: 14px; color: #e0e0e0; }
+  .divider { border: none; border-top: 1px solid #1e2130; margin: 14px 0; }
+
+  /* ── Authorization banner ── */
+  .auth-banner { display: flex; align-items: flex-start; gap: 10px; border-radius: 8px;
+    padding: 11px 14px; font-size: 12.5px; line-height: 1.5; margin: 4px 0 6px; }
+  .auth-banner .auth-icon { font-size: 15px; line-height: 1.2; }
+  .auth-banner.ok   { border: 1px solid #4caf50; background: rgba(76,175,80,0.07); color: #7bd389; }
+  .auth-banner.warn { border: 1px solid #fb8c00; background: rgba(251,140,0,0.07); color: #ffb454; }
+  .auth-banner.deny { border: 1px solid #f44336; background: rgba(244,67,54,0.07); color: #ff7a70; }
+
+  /* ── Form sections ── */
+  .section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #555;
+    margin: 18px 0 10px; font-weight: 600; }
+  .section-label .pill-note { color: #4da6ff; font-size: 11px; text-transform: none; letter-spacing: 0; }
+  .section-label .pill-kyc { color: #4caf50; font-size: 11px; text-transform: none; letter-spacing: 0; }
+  .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group label { font-size: 12px; color: #666; }
+  .form-group input, .form-group textarea, .form-group select {
+    background: #0e1117; border: 1px solid #2a2a2a; border-radius: 6px;
+    color: #e0e0e0; font-size: 13px; padding: 8px 10px; outline: none; font-family: inherit;
+    transition: border-color 0.2s; }
+  .form-group input:focus, .form-group textarea:focus { border-color: #4da6ff; }
+  .form-group input[readonly], .form-group textarea[readonly] { color: #777; cursor: default; }
+  .form-group textarea { resize: vertical; }
+  .full-span { grid-column: 1 / -1; }
+
+  /* ── Reason code chips ── */
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { border: 1px solid #2a2a2a; background: #0e1117; color: #888; border-radius: 16px;
+    padding: 5px 13px; font-size: 12px; cursor: pointer; user-select: none; transition: all 0.15s; }
+  .chip:hover { border-color: #4da6ff; color: #ccc; }
+  .chip.active { background: rgba(77,166,255,0.15); border-color: #4da6ff; color: #4da6ff; font-weight: 600; }
+
+  /* ── Declaration / rejection ── */
+  .declaration-box { border: 1px solid #2a2a2a; border-radius: 8px; background: #0e1117;
+    padding: 14px; margin-top: 10px; display: flex; align-items: flex-start; gap: 10px; }
+  .declaration-box input[type=checkbox] { margin-top: 2px; accent-color: #4da6ff; width: 15px; height: 15px; flex-shrink: 0; }
+  .declaration-box span { font-size: 12px; color: #888; line-height: 1.6; }
+  .rejection-box { border: 1px solid #f44336; border-radius: 8px; background: rgba(244,67,54,0.05);
+    padding: 14px; margin-top: 10px; }
+  .rejection-box label { font-size: 12px; color: #f44336; display: block; margin-bottom: 6px; }
+  .rejection-box input { background: #0e1117; border: 1px solid #f44336; border-radius: 6px;
+    color: #e0e0e0; font-size: 13px; padding: 8px 10px; width: 100%; outline: none; font-family: inherit; }
+
+  /* ── Action Buttons ── */
+  .action-area { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; }
+  .btn { border: none; border-radius: 7px; padding: 10px 18px; font-size: 13px; font-weight: 600;
+    cursor: pointer; width: 100%; font-family: inherit; transition: opacity 0.15s; }
+  .btn:hover { opacity: 0.85; }
+  .btn-primary { background: #4da6ff; color: #000; }
+  .btn-secondary { background: #1e2130; color: #ccc; border: 1px solid #2a2a2a; }
+  .btn-danger { background: transparent; color: #f44336; border: 1px solid #f44336; }
+  .btn-download { background: rgba(76,175,80,0.12); color: #4caf50; border: 1px solid #4caf50; }
+  .btn[disabled] { opacity: 0.3; cursor: not-allowed; }
+  .btn-lock-reason { font-size: 11px; color: #ff7a70; text-align: center; margin-top: -2px; }
+
+  /* ── Right sidebar ── */
+  .right-col { display: flex; flex-direction: column; gap: 16px; }
+  .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .metric-card { border: 1px solid #1e2130; border-radius: 8px; background: #0e1117; padding: 14px; text-align: center; }
+  .metric-label { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .metric-value { font-size: 32px; font-weight: 700; }
+  .metric-value.blue { color: #4da6ff; }
+  .metric-value.orange { color: #fb8c00; }
+  .metric-value.green { color: #4caf50; }
+  .metric-value.yellow { color: #fdd835; }
+
+  /* ── Review history ── */
+  .review-row { display: flex; flex-direction: column; gap: 5px; padding: 12px 0; border-bottom: 1px solid #1e2130; }
+  .review-row:last-child { border-bottom: none; }
+  .review-row-header { display: flex; justify-content: space-between; align-items: center; }
+  .review-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+  .review-badge.maker { background: rgba(76,175,80,0.15); color: #4caf50; }
+  .review-badge.l1 { background: rgba(77,166,255,0.15); color: #4da6ff; }
+  .review-badge.l2 { background: rgba(251,140,0,0.15); color: #fb8c00; }
+  .review-badge.pending { background: rgba(100,100,100,0.15); color: #555; }
+  .review-analyst { font-size: 12px; color: #888; }
+  .review-decision { font-size: 12px; color: #666; margin-top: 2px; }
+  .review-role { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* ── SoD legend card ── */
+  .sod-note { font-size: 11.5px; color: #777; line-height: 1.6; }
+  .sod-note b { color: #aaa; }
+
+  /* ── Status pills ── */
+  .status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px;
+    border-radius: 20px; font-size: 12px; font-weight: 600; }
+  .status-pill.l1 { background: rgba(253,216,53,0.15); color: #fdd835; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+  /* ── All STRs tab ── */
+  .filters-row { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .filter-group { display: flex; flex-direction: column; gap: 4px; }
+  .filter-group label { font-size: 11px; color: #666; }
+  .filter-group input, .filter-group select {
+    background: #13161f; border: 1px solid #2a2a2a; border-radius: 6px;
+    color: #e0e0e0; font-size: 13px; padding: 7px 10px; outline: none; font-family: inherit; }
+  .metrics-top { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .mini-metric { border: 1px solid #1e2130; border-radius: 8px; padding: 14px 16px; background: #13161f; }
+  .mini-metric-val { font-size: 24px; font-weight: 700; }
+  .mini-metric-lbl { font-size: 11px; color: #666; margin-top: 2px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { background: #0e1117; color: #555; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.8px; padding: 10px 12px; text-align: left; border-bottom: 1px solid #1e2130; }
+  tbody tr { border-bottom: 1px solid #1a1d27; }
+  tbody tr:hover { background: #13161f; }
+  tbody td { padding: 10px 12px; color: #ccc; vertical-align: middle; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px;
+    border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .badge.draft { background: rgba(100,100,100,0.15); color: #888; }
+  .badge.l1r { background: rgba(253,216,53,0.15); color: #fdd835; }
+  .badge.l2r { background: rgba(251,140,0,0.15); color: #fb8c00; }
+  .badge.approved { background: rgba(77,166,255,0.15); color: #4da6ff; }
+  .badge.archived { background: rgba(76,175,80,0.15); color: #4caf50; }
+  .btn-mini { background: #1e2130; color: #4da6ff; border: 1px solid #2a3550; border-radius: 6px;
+    padding: 5px 11px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap; }
+  .btn-mini:hover { background: #232a3d; }
+  .btn-mini.dl { background: rgba(76,175,80,0.10); color: #4caf50; border-color: #2e5a34; }
+  .btn-mini.dl:hover { background: rgba(76,175,80,0.18); }
+  .btn-mini[disabled] { opacity: 0.3; cursor: not-allowed; }
+  .row-actions { display: flex; gap: 6px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Page header -->
+  <div class="page-title">STR Generation</div>
+  <div class="page-caption">Draft, review, and approve Suspicious Transaction Reports with maker–checker controls.</div>
+
+  <!-- Role context / simulator (demo control) -->
+  <div class="context-bar">
+    <span class="ctx-label">Acting as</span>
+    <select id="role-select" onchange="recompute()">
+      <option value="Analyst|analyst_01">Analyst — analyst_01 (drafter of this STR)</option>
+      <option value="Compliance Officer|comp_01" selected>Compliance Officer — comp_01</option>
+      <option value="Senior Management|snr_01">Senior Management — snr_01</option>
+      <option value="Admin|admin_01">Admin — admin_01</option>
+    </select>
+    <span class="ctx-userid" id="ctx-userid">comp_01</span>
+    <div class="ctx-spacer"></div>
+    <span class="ctx-hint">↑ switch role to see authorization &amp; segregation-of-duties gating change live</span>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('workflow', this)">Current Case Workflow</div>
+    <div class="tab" onclick="switchTab('allstrs', this)">All STRs</div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════
+       TAB 1 — Current Case Workflow
+  ══════════════════════════════════════════ -->
+  <div class="tab-content active" id="tab-workflow">
+
+    <!-- Workflow stages (now annotated with the role that owns each gate) -->
+    <div class="stages">
+      <div class="stage-card done">
+        <div class="stage-icon">✅</div>
+        <div class="stage-name">Draft</div>
+        <div class="stage-sub">Saved</div>
+        <div class="stage-role">Analyst</div>
+      </div>
+      <div class="stage-card active">
+        <div class="stage-icon" style="color:#4da6ff;">●</div>
+        <div class="stage-name">L1 Review</div>
+        <div class="stage-sub">In Progress</div>
+        <div class="stage-role">Compliance Officer</div>
+      </div>
+      <div class="stage-card">
+        <div class="stage-icon" style="color:#444;">●</div>
+        <div class="stage-name">L2 Review</div>
+        <div class="stage-sub">Pending</div>
+        <div class="stage-role">Senior Management</div>
+      </div>
+      <div class="stage-card">
+        <div class="stage-icon" style="color:#444;">●</div>
+        <div class="stage-name">Approved</div>
+        <div class="stage-sub">Pending</div>
+        <div class="stage-role">Filed</div>
+      </div>
+    </div>
+
+    <!-- Case summary banner -->
+    <div class="case-banner">
+      <div class="banner-item"><span class="banner-label">Case ID</span><span class="banner-value blue">CASE-00142</span></div>
+      <div class="banner-divider"></div>
+      <div class="banner-item"><span class="banner-label">Transaction ID</span><span class="banner-value">TXN-8821</span></div>
+      <div class="banner-divider"></div>
+      <div class="banner-item"><span class="banner-label">Customer</span><span class="banner-value">Ahmad Rizal</span></div>
+      <div class="banner-divider"></div>
+      <div class="banner-item"><span class="banner-label">Amount</span><span class="banner-value red">$142,500</span></div>
+      <div class="banner-divider"></div>
+      <div class="banner-item"><span class="banner-label">Risk Tier</span><span class="banner-value red">Critical</span></div>
+      <div class="banner-divider"></div>
+      <div class="banner-item"><span class="banner-label">RF Score</span><span class="banner-value orange">0.917</span></div>
+      <div class="banner-divider"></div>
+      <div class="banner-item"><span class="banner-label">CDD Level</span><span class="banner-value">Enhanced</span></div>
+    </div>
+
+    <!-- Main layout -->
+    <div class="main-grid">
+
+      <!-- ── Left: STR Form ── -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <span class="card-title" style="margin-bottom:0">STR Form</span>
+          <span class="status-pill l1"><span class="status-dot"></span>L1 Review</span>
+        </div>
+        <hr class="divider">
+
+        <!-- #2 + #1: Authorization / SoD banner (driven by role simulator) -->
+        <div class="auth-banner ok" id="auth-banner">
+          <span class="auth-icon">✓</span>
+          <span id="auth-text">You (Compliance Officer · comp_01) are authorised to approve this L1 review.</span>
+        </div>
+
+        <!-- ── Subject Particulars (#3 — pre-filled from KYC, editable) ── -->
+        <div class="section-label">Subject Particulars <span class="pill-kyc">● pre-filled from KYC</span></div>
+        <div class="form-grid-2">
+          <div class="form-group"><label>Full Name</label><input type="text" value="Ahmad Rizal bin Hassan" /></div>
+          <div class="form-group"><label>Date of Birth</label><input type="text" value="1988-03-14" /></div>
+          <div class="form-group"><label>Nationality</label><input type="text" value="Singaporean" /></div>
+          <div class="form-group"><label>ID Type</label>
+            <select><option>NRIC</option><option>Passport</option><option>FIN</option></select>
+          </div>
+          <div class="form-group"><label>ID Number</label><input type="text" value="S8812345A" /></div>
+          <div class="form-group"><label>Customer ID</label><input type="text" value="CUST-00449" readonly /></div>
+          <div class="form-group full-span"><label>Residential Address</label>
+            <input type="text" value="14 Marina View, #22-01, Singapore 018961" /></div>
+        </div>
+
+        <!-- Transaction Details (read-only) -->
+        <div class="section-label">Transaction Details</div>
+        <div class="form-grid-2">
+          <div class="form-group"><label>Reporting Institution</label><input type="text" value="Counter AI Demo Bank" readonly /></div>
+          <div class="form-group"><label>Report Date</label><input type="date" value="2026-06-07" /></div>
+          <div class="form-group"><label>Transaction Reference</label><input type="text" value="TXN-8821" readonly /></div>
+          <div class="form-group"><label>Date of Suspicious Transaction</label><input type="text" value="2026-06-04" readonly /></div>
+          <div class="form-group"><label>Sender Account</label><input type="text" value="Account 449201" readonly /></div>
+          <div class="form-group"><label>Receiver Account</label><input type="text" value="Account 887733" readonly /></div>
+          <div class="form-group"><label>Amount / Currency</label><input type="text" value="142,500 SGD" readonly /></div>
+          <div class="form-group"><label>AI Flagging Summary</label><input type="text" value="RF score: 0.917 — Critical" readonly /></div>
+        </div>
+
+        <!-- #3: Reason codes -->
+        <div class="section-label">Reason Codes <span class="pill-note">● select all that apply</span></div>
+        <div class="chips" id="reason-chips">
+          <span class="chip active">Structuring</span>
+          <span class="chip active">Cross-border layering</span>
+          <span class="chip">Smurfing</span>
+          <span class="chip">Trade-based ML</span>
+          <span class="chip">Rapid movement of funds</span>
+          <span class="chip">Unusual for profile</span>
+          <span class="chip">High-risk jurisdiction</span>
+          <span class="chip">PEP involvement</span>
+        </div>
+
+        <!-- Grounds for Suspicion (editable) -->
+        <div class="section-label">Grounds for Suspicion <span class="pill-note">● editable</span></div>
+        <div class="form-group">
+          <textarea rows="5">AI-driven indicators suggest suspicious behaviour: amount_log; cross_border; is_off_hours.
+
+High-value cross-border transfer of $142,500 flagged at 02:14. Sender has no prior history of international transfers. Pattern consistent with structuring just below reporting thresholds. Enhanced CDD applied.</textarea>
+        </div>
+
+        <!-- Filing Details -->
+        <div class="section-label">Filing Details</div>
+        <div class="form-grid-2">
+          <div class="form-group"><label>Reviewer (you)</label><input type="text" id="reviewer-field" value="comp_01" readonly /></div>
+          <div class="form-group"><label>Reference Number</label><input type="text" value="STR-20260607-882100" readonly /></div>
+        </div>
+
+        <!-- Action buttons (gated) -->
+        <div class="action-area">
+          <button class="btn btn-primary" id="submit-btn">Approve to L2 Review</button>
+          <div class="btn-lock-reason" id="lock-reason" style="display:none;"></div>
+          <button class="btn btn-secondary">Save Draft</button>
+          <button class="btn btn-danger">Return to Drafter</button>
+        </div>
+      </div>
+
+      <!-- ── Right sidebar ── -->
+      <div class="right-col">
+
+        <!-- STR Metrics -->
+        <div class="card">
+          <div class="card-title">STR Metrics</div>
+          <hr class="divider">
+          <div class="metrics-grid">
+            <div class="metric-card"><div class="metric-label">Total STRs</div><div class="metric-value blue">14</div></div>
+            <div class="metric-card"><div class="metric-label">In Review</div><div class="metric-value orange">3</div></div>
+            <div class="metric-card"><div class="metric-label">Approved</div><div class="metric-value green">8</div></div>
+            <div class="metric-card"><div class="metric-label">Draft</div><div class="metric-value yellow">3</div></div>
+          </div>
+        </div>
+
+        <!-- Review History (now shows maker + checkers with roles) -->
+        <div class="card">
+          <div class="card-title">Maker–Checker Trail</div>
+          <hr class="divider">
+          <div class="review-row">
+            <div class="review-row-header"><span class="review-badge maker">Drafted</span><span class="review-analyst">analyst_01</span></div>
+            <div class="review-role">Analyst</div>
+            <div class="review-decision">Submitted to L1 · 2026-06-05</div>
+          </div>
+          <div class="review-row">
+            <div class="review-row-header"><span class="review-badge l1">L1 Review</span><span class="review-analyst" id="hist-l1">— awaiting —</span></div>
+            <div class="review-role">Compliance Officer</div>
+            <div class="review-decision" id="hist-l1-dec" style="color:#444;">Pending L1 reviewer</div>
+          </div>
+          <div class="review-row">
+            <div class="review-row-header"><span class="review-badge pending">L2 Review</span><span class="review-analyst">—</span></div>
+            <div class="review-role">Senior Management</div>
+            <div class="review-decision" style="color:#444;">Pending L2 reviewer</div>
+          </div>
+        </div>
+
+        <!-- SoD legend -->
+        <div class="card">
+          <div class="card-title">Segregation of Duties</div>
+          <hr class="divider">
+          <div class="sod-note">
+            Each gate must be cleared by a <b>different</b> person:<br>
+            • L1 reviewer ≠ drafter<br>
+            • L2 reviewer ≠ L1 reviewer and ≠ drafter<br><br>
+            Drafter of this STR: <b>analyst_01</b>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════
+       TAB 2 — All STRs (now actionable: Open in workflow)
+  ══════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-allstrs">
+
+    <div class="metrics-top">
+      <div class="mini-metric"><div class="mini-metric-val" style="color:#4da6ff;">14</div><div class="mini-metric-lbl">Total STRs</div></div>
+      <div class="mini-metric"><div class="mini-metric-val" style="color:#fdd835;">3</div><div class="mini-metric-lbl">Draft</div></div>
+      <div class="mini-metric"><div class="mini-metric-val" style="color:#fb8c00;">3</div><div class="mini-metric-lbl">In Review (L1/L2)</div></div>
+      <div class="mini-metric"><div class="mini-metric-val" style="color:#4caf50;">8</div><div class="mini-metric-lbl">Approved / Archived</div></div>
+    </div>
+
+    <div class="filters-row">
+      <div class="filter-group" style="flex:2;">
+        <label>Search STR ID / Case ID / Transaction ID</label>
+        <input type="text" placeholder="Search...">
+      </div>
+      <div class="filter-group" style="flex:1;">
+        <label>Filter by Status</label>
+        <select><option>All Statuses</option><option>Draft</option><option selected>L2 Review</option><option>L1 Review</option><option>Approved</option><option>Archived</option></select>
+      </div>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden;">
+      <table>
+        <thead>
+          <tr>
+            <th>Status</th><th>STR ID</th><th>Case ID</th><th>Txn ID</th>
+            <th>Reference No.</th><th>Drafter</th><th>L1 Reviewer</th><th>L2 Reviewer</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge l2r">🟠 L2 Review</span></td>
+            <td>STR-0008</td><td>CASE-00121</td><td>TXN-4490</td>
+            <td>STR-20260604-449001</td><td>analyst_03</td><td>comp_02</td><td>—</td>
+            <td><div class="row-actions">
+              <button class="btn-mini" onclick="openInWorkflow()">Open in workflow →</button>
+              <button class="btn-mini dl" disabled title="Available once Approved">⬇ STR</button>
+            </div></td>
+          </tr>
+          <tr>
+            <td><span class="badge l1r">🟡 L1 Review</span></td>
+            <td>STR-0012</td><td>CASE-00142</td><td>TXN-8821</td>
+            <td>STR-20260607-882100</td><td>analyst_01</td><td>—</td><td>—</td>
+            <td><div class="row-actions">
+              <button class="btn-mini" onclick="openInWorkflow()">Open in workflow →</button>
+              <button class="btn-mini dl" disabled title="Available once Approved">⬇ STR</button>
+            </div></td>
+          </tr>
+          <tr>
+            <td><span class="badge draft">⚪ Draft</span></td>
+            <td>STR-0010</td><td>CASE-00133</td><td>TXN-6612</td>
+            <td>—</td><td>analyst_02</td><td>—</td><td>—</td>
+            <td><div class="row-actions">
+              <button class="btn-mini" onclick="openInWorkflow()">Open in workflow →</button>
+              <button class="btn-mini dl" disabled title="Available once Approved">⬇ STR</button>
+            </div></td>
+          </tr>
+          <tr>
+            <td><span class="badge archived">🟢 Archived</span></td>
+            <td>STR-0011</td><td>CASE-00138</td><td>TXN-7744</td>
+            <td>STR-20260529-774400</td><td>analyst_02</td><td>comp_01</td><td>snr_01</td>
+            <td><div class="row-actions">
+              <button class="btn-mini" onclick="openInWorkflow()">View →</button>
+              <button class="btn-mini dl" onclick="alert('Downloads STR-20260529-774400.html')">⬇ STR</button>
+            </div></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="font-size:11px;color:#555;margin-top:10px;">
+      “Open in workflow” loads the selected STR into the workflow tab, where the role &amp; segregation-of-duties gate decides whether <i>you</i> can action it.
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+  function switchTab(name, el) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('tab-' + name).classList.add('active');
+  }
+
+  // Reason chip toggles
+  document.querySelectorAll('#reason-chips .chip').forEach(c =>
+    c.addEventListener('click', () => c.classList.toggle('active')));
+
+  function openInWorkflow() {
+    document.querySelector('.tab').click();  // jump to workflow tab
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // ── Authorization + SoD logic for the L1 gate of STR-0012 ──
+  const STAGE = 'L1';                 // current stage of the loaded STR
+  const DRAFTED_BY = 'analyst_01';    // maker
+  const ALLOWED_ROLES = { L1: ['Compliance Officer', 'Admin'], L2: ['Senior Management', 'Admin'] };
+
+  function recompute() {
+    const [role, userId] = document.getElementById('role-select').value.split('|');
+    document.getElementById('ctx-userid').textContent = userId;
+    document.getElementById('reviewer-field').value = userId;
+
+    const banner = document.getElementById('auth-banner');
+    const text   = document.getElementById('auth-text');
+    const btn    = document.getElementById('submit-btn');
+    const lock   = document.getElementById('lock-reason');
+
+    const roleOk = ALLOWED_ROLES[STAGE].includes(role);
+    const sodOk  = userId !== DRAFTED_BY;
+
+    banner.classList.remove('ok', 'warn', 'deny');
+    if (!roleOk) {
+      banner.classList.add('warn');
+      text.innerHTML = `Your role (<b>${role}</b>) cannot approve an L1 review. Requires: <b>Compliance Officer</b> or <b>Admin</b>.`;
+      btn.disabled = true;
+      lock.style.display = 'block';
+      lock.textContent = 'Action locked — insufficient role for this gate.';
+    } else if (!sodOk) {
+      banner.classList.add('deny');
+      text.innerHTML = `Segregation of duties: you (<b>${userId}</b>) drafted this STR and cannot also approve its L1 review.`;
+      btn.disabled = true;
+      lock.style.display = 'block';
+      lock.textContent = 'Action locked — segregation of duties (maker ≠ checker).';
+    } else {
+      banner.classList.add('ok');
+      text.innerHTML = `✓ You (<b>${role}</b> · ${userId}) are authorised to approve this L1 review.`;
+      btn.disabled = false;
+      lock.style.display = 'none';
+    }
+  }
+  recompute();
+</script>
+</body>
+</html>

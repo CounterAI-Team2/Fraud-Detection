@@ -5,10 +5,19 @@ from datetime import date
 import streamlit as st
 
 from utils.sidebar import render_sidebar
-from utils.aml_services import archive_str_case, build_archive_search_view, get_all_str_records, upsert_str_workflow
+from utils.aml_services import (
+    archive_str_case,
+    build_archive_search_view,
+    build_str_case_from_record,
+    get_all_str_records,
+    get_str_subject,
+    upsert_str_workflow,
+)
 from utils.audit_logger import log_action
 from utils.constants import (
     INSTITUTION_NAME,
+    STR_GATE_ROLE_LABEL,
+    STR_REASON_CODES,
     STR_STATUS_APPROVED,
     STR_STATUS_ARCHIVED,
     STR_STATUS_DRAFT,
@@ -18,7 +27,8 @@ from utils.constants import (
 )
 from utils.data_store import get_str_cases
 from utils.session_utils import get_current_analyst
-from utils.str_builder import build_default_grounds, make_reference_number
+from utils.str_authz import authorize, gate_for_status
+from utils.str_builder import build_default_grounds, build_str_document, make_reference_number
 
 render_sidebar()
 
@@ -26,18 +36,10 @@ if "str_log" not in st.session_state:
     st.session_state["str_log"] = []
 
 st.title("STR Generation")
-st.caption("Draft, review, and approve Suspicious Transaction Reports through the L1/L2 workflow.")
+st.caption("Draft, review, and approve Suspicious Transaction Reports with maker–checker controls.")
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 _STAGES = [STR_STATUS_DRAFT, STR_STATUS_L1, STR_STATUS_L2, STR_STATUS_APPROVED]
-
-_STAGE_META = {
-    STR_STATUS_DRAFT:    ("#4caf50", "●", "Saved"),
-    STR_STATUS_L1:       ("#4da6ff", "●", "In Progress"),
-    STR_STATUS_L2:       ("#fb8c00", "●", "Pending"),
-    STR_STATUS_APPROVED: ("#4caf50", "●", "Pending"),
-    STR_STATUS_ARCHIVED: ("#888",    "●", "Archived"),
-}
 
 _STATUS_BADGE = {
     STR_STATUS_DRAFT:    "⚪ Draft",
@@ -55,18 +57,25 @@ _STATUS_PILL_COLOR = {
     STR_STATUS_ARCHIVED: "#4caf50",
 }
 
-_TIER_COLOR = {
-    "Critical": "#f44336",
-    "High":     "#fb8c00",
-    "Medium":   "#fdd835",
-    "Low":      "#64dd17",
-}
+_TIER_COLOR = {"Critical": "#f44336", "High": "#fb8c00", "Medium": "#fdd835", "Low": "#64dd17"}
 
 _SUBMIT_LABELS = {
     STR_STATUS_DRAFT: "Submit to L1 Review",
     STR_STATUS_L1:    "Approve to L2 Review",
     STR_STATUS_L2:    "Final Approve & Archive",
 }
+
+_AUTH_COLORS = {"ok": "#4caf50", "role": "#fb8c00", "sod": "#f44336", "lock": "#888"}
+_AUTH_ICON = {"ok": "✓", "role": "⚠", "sod": "⛔", "lock": "🔒"}
+
+_SUBJECT_FIELDS = [
+    ("subject_name", "Full Name"),
+    ("subject_dob", "Date of Birth"),
+    ("subject_nationality", "Nationality"),
+    ("subject_id_type", "ID Type"),
+    ("subject_id_number", "ID Number"),
+    ("subject_address", "Residential Address"),
+]
 
 
 # ── Shared HTML helpers ───────────────────────────────────────────────────────
@@ -87,8 +96,11 @@ def _banner_item(label: str, value: str, color: str = "#e0e0e0") -> str:
     )
 
 
-def _section_label(text: str, accent: str = "") -> None:
-    accent_html = f" <span style='color:#4da6ff;font-size:10px;text-transform:none;letter-spacing:0'>{accent}</span>" if accent else ""
+def _section_label(text: str, accent: str = "", accent_color: str = "#4da6ff") -> None:
+    accent_html = (
+        f" <span style='color:{accent_color};font-size:10px;text-transform:none;letter-spacing:0'>{accent}</span>"
+        if accent else ""
+    )
     st.markdown(
         f"<div style='font-size:11px;text-transform:uppercase;letter-spacing:1px;"
         f"color:#555;font-weight:600;margin:14px 0 10px'>{text}{accent_html}</div>",
@@ -96,26 +108,36 @@ def _section_label(text: str, accent: str = "") -> None:
     )
 
 
-def _review_row_html(badge_label: str, badge_color: str, reviewer: str, reason: str, reviewed_at: str, last: bool = False) -> str:
-    reviewer_display = reviewer or "—"
-    if not reviewer:
-        decision_text  = "Awaiting reviewer"
-        decision_color = "#555"
-    else:
-        decision_text  = f"{reason or '—'} · {reviewed_at or ''}"
-        decision_color = "#888"
+def _auth_banner(level: str, message: str) -> None:
+    color = _AUTH_COLORS.get(level, "#888")
+    icon = _AUTH_ICON.get(level, "•")
+    st.markdown(
+        f"<div style='display:flex;gap:10px;align-items:flex-start;border:1px solid {color};"
+        f"background:{_hex_rgba(color, 0.07)};border-radius:8px;padding:11px 14px;margin:4px 0 10px'>"
+        f"<span style='font-size:15px'>{icon}</span>"
+        f"<span style='font-size:12.5px;color:{color};line-height:1.5'>{message}</span></div>",
+        unsafe_allow_html=True,
+    )
+
+
+def _trail_row(badge_label: str, badge_color: str, role_label: str, actor: str,
+               decision: str, decision_color: str = "#888", last: bool = False) -> str:
     bg = _hex_rgba(badge_color, 0.15)
     border = "" if last else "border-bottom:1px solid #1e2130;"
     return (
         f"<div style='padding:10px 0;{border}'>"
-        f"<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:4px'>"
+        f"<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:3px'>"
         f"<span style='font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;"
         f"background:{bg};color:{badge_color}'>{badge_label}</span>"
-        f"<span style='font-size:12px;color:#888'>{reviewer_display}</span>"
-        f"</div>"
-        f"<div style='font-size:12px;color:{decision_color};margin-top:2px'>{decision_text}</div>"
+        f"<span style='font-size:12px;color:#888'>{actor or '—'}</span></div>"
+        f"<div style='font-size:10px;color:#555;text-transform:uppercase;letter-spacing:0.5px'>{role_label}</div>"
+        f"<div style='font-size:12px;color:{decision_color};margin-top:2px'>{decision}</div>"
         f"</div>"
     )
+
+
+def _parse_reason_codes(raw: str) -> list[str]:
+    return [c.strip() for c in str(raw or "").split(",") if c.strip()]
 
 
 # ── STR Metrics (always visible above tabs) ───────────────────────────────────
@@ -124,6 +146,15 @@ _total_top  = len(_all_m_top) if not _all_m_top.empty else 0
 _inrev_top  = int(_all_m_top["status"].isin([STR_STATUS_L1, STR_STATUS_L2]).sum()) if not _all_m_top.empty else 0
 _approv_top = int(_all_m_top["status"].isin([STR_STATUS_APPROVED, STR_STATUS_ARCHIVED]).sum()) if not _all_m_top.empty else 0
 _draft_top  = int(_all_m_top["status"].eq(STR_STATUS_DRAFT).sum()) if not _all_m_top.empty else 0
+
+_actor_id_top, _actor_role_top = get_current_analyst()
+st.markdown(
+    f"<div style='border:1px solid #1e2130;border-radius:10px;background:#13161f;"
+    f"padding:10px 16px;margin-bottom:14px;font-size:12px;color:#888'>"
+    f"<span style='text-transform:uppercase;letter-spacing:1px;color:#555;font-size:11px'>Acting as</span>"
+    f"&nbsp;&nbsp;<b style='color:#4da6ff'>{_actor_role_top}</b> · {_actor_id_top}</div>",
+    unsafe_allow_html=True,
+)
 
 _hm1, _hm2, _hm3, _hm4 = st.columns(4)
 for _hmcol, _hmlabel, _hmval, _hmcolor in [
@@ -154,7 +185,7 @@ tab_workflow, tab_all = st.tabs(["Current Case Workflow", "All STRs"])
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_workflow:
     if "str_case" not in st.session_state or st.session_state["str_case"] is None:
-        st.info("No case loaded. Escalate a case from Case Investigation to begin an STR workflow.")
+        st.info("No case loaded. Escalate a case from Case Investigation, or open an in-progress STR from the All STRs tab.")
     else:
         str_case = st.session_state["str_case"]
         actor_id, actor_role = get_current_analyst()
@@ -166,30 +197,56 @@ with tab_workflow:
             if not _match.empty:
                 existing_str = _match.iloc[0].to_dict()
 
-        starting_status = existing_str.get("status", STR_STATUS_DRAFT) if existing_str else STR_STATUS_DRAFT
-        str_record      = upsert_str_workflow(existing_str or str_case, build_default_grounds(str_case), starting_status)
+        # Seed the working record: existing row if present, else the escalated case.
+        base = dict(existing_str) if existing_str else dict(str_case)
+
+        # Subject particulars — seed any blank field from the KYC store.
+        _subject_seed = get_str_subject(str_case)
+        for _k, _v in _subject_seed.items():
+            if not base.get(_k):
+                base[_k] = _v
+        # Drafter identity — captured once, on first creation.
+        if not base.get("drafted_by"):
+            base["drafted_by"] = actor_id
+            base["drafted_role"] = actor_role
+        if not base.get("currency"):
+            base["currency"] = str(str_case.get("currency", "") or "")
+
+        starting_status = base.get("status", STR_STATUS_DRAFT) or STR_STATUS_DRAFT
+        grounds_seed = base.get("grounds") or build_default_grounds(str_case)
+        str_record = upsert_str_workflow(base, grounds_seed, starting_status)
         st.session_state["current_str_id"] = str_record["str_id"]
         current_status = str_record["status"]
         _cur_idx = _STAGES.index(current_status) if current_status in _STAGES else 0
 
-        # ── Workflow stage cards ──────────────────────────────────────────────
+        _is_locked = current_status in (STR_STATUS_APPROVED, STR_STATUS_ARCHIVED)
+        _action = gate_for_status(current_status)
+        if _is_locked:
+            _allowed, _auth_level, _auth_msg = False, "lock", "This STR is approved and locked — read-only."
+        else:
+            _allowed, _auth_level, _auth_msg = authorize(_action, actor_id, actor_role, str_record)
+
+        # ── Workflow stage cards (annotated with the role that owns each gate) ──
         _wf_cols = st.columns(len(_STAGES))
         for _i, (_col, _stage) in enumerate(zip(_wf_cols, _STAGES)):
-            _color, _icon, _sub = _STAGE_META.get(_stage, ("#888", "●", ""))
-            _is_current   = _i == _cur_idx
-            _is_done      = _i < _cur_idx
+            _color = _STATUS_PILL_COLOR.get(_stage, "#888")
+            _is_current = _i == _cur_idx
+            _is_done = _i < _cur_idx
             _border_color = _color if (_is_current or _is_done) else "#2a2a2a"
-            _bg           = _hex_rgba(_color, 0.08) if (_is_current or _is_done) else "#13161f"
-            _label_color  = "#fff" if (_is_current or _is_done) else "#555"
-            _sub_text     = "Saved" if _is_done else ("In Progress" if _is_current else "Pending")
-            _sub_color    = "#4caf50" if _is_done else (_color if _is_current else "#444")
-            _icon_inner   = "✅" if _is_done else f"<span style='color:{_color}'>{_icon}</span>"
+            _bg = _hex_rgba(_color, 0.08) if (_is_current or _is_done) else "#13161f"
+            _label_color = "#fff" if (_is_current or _is_done) else "#555"
+            _sub_text = "Saved" if _is_done else ("In Progress" if _is_current else "Pending")
+            _sub_color = "#4caf50" if _is_done else (_color if _is_current else "#444")
+            _icon_inner = "✅" if _is_done else f"<span style='color:{_color}'>●</span>"
+            _role_lbl = STR_GATE_ROLE_LABEL.get(_stage, "Filed")
             _col.markdown(
                 f"<div style='border:2px solid {_border_color};border-radius:10px;background:{_bg};"
                 f"padding:16px 12px;text-align:center'>"
-                f"<div style='font-size:28px;margin-bottom:6px'>{_icon_inner}</div>"
+                f"<div style='font-size:26px;margin-bottom:6px'>{_icon_inner}</div>"
                 f"<div style='font-weight:700;color:{_label_color};font-size:14px'>{_stage}</div>"
                 f"<div style='font-size:12px;color:{_sub_color};margin-top:4px'>{_sub_text}</div>"
+                f"<div style='font-size:10px;color:#555;margin-top:6px;text-transform:uppercase;"
+                f"letter-spacing:0.5px'>{_role_lbl}</div>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
@@ -197,56 +254,60 @@ with tab_workflow:
         st.markdown("<br>", unsafe_allow_html=True)
 
         # ── Case summary banner ───────────────────────────────────────────────
-        _tier     = str(str_case.get("risk_tier", "—"))
+        _tier = str(str_case.get("risk_tier", "—"))
         _tier_clr = _TIER_COLOR.get(_tier, "#888")
-        _customer = str(str_case.get("customer_name") or str_case.get("customer_id") or "—")
-        _amount   = float(str_case.get("amount", 0))
-        _score    = float(str_case.get("risk_score", 0))
+        _customer = str(str_record.get("subject_name") or str_case.get("customer_name") or str_case.get("customer_id") or "—")
+        _amount = float(str_case.get("amount", 0) or 0)
+        _score = float(str_case.get("risk_score", 0) or 0)
         _div_html = "<div style='width:1px;background:#1e2130;align-self:stretch;'></div>"
-
         st.markdown(
             f"<div style='border:1px solid #1e2130;border-radius:10px;background:#13161f;"
             f"padding:14px 18px;display:flex;gap:24px;align-items:center;flex-wrap:wrap;margin-bottom:16px'>"
-            + _banner_item("Case ID", str(str_case.get("case_id", "—")), "#4da6ff")
-            + _div_html
-            + _banner_item("Transaction ID", str(str_case.get("transaction_id", "—")))
-            + _div_html
-            + _banner_item("Customer", _customer)
-            + _div_html
-            + _banner_item("Amount", f"${_amount:,.0f}", "#f44336")
-            + _div_html
-            + _banner_item("Risk Tier", _tier, _tier_clr)
-            + _div_html
-            + _banner_item("RF Score", f"{_score:.3f}", "#fb8c00")
-            + _div_html
+            + _banner_item("Case ID", str(str_case.get("case_id", "—")), "#4da6ff") + _div_html
+            + _banner_item("Transaction ID", str(str_case.get("transaction_id", "—"))) + _div_html
+            + _banner_item("Customer", _customer) + _div_html
+            + _banner_item("Amount", f"${_amount:,.0f}", "#f44336") + _div_html
+            + _banner_item("Risk Tier", _tier, _tier_clr) + _div_html
+            + _banner_item("RF Score", f"{_score:.3f}", "#fb8c00") + _div_html
             + _banner_item("CDD Level", str(str_case.get("cdd_level", "—")))
             + "</div>",
             unsafe_allow_html=True,
         )
 
-        # ── Main layout: Form (left) | Metrics + History (right) ─────────────
+        # ── Main layout: Form (left) | Trail (right) ──────────────────────────
         _form_col, _right_col = st.columns([3, 2], gap="medium")
 
-        # ─────────────────────────────── LEFT: STR Form ──────────────────────
         with _form_col:
             with st.container(border=True):
-                # Header: title + status pill
                 _pill_color = _STATUS_PILL_COLOR.get(current_status, "#888")
-                _pill_label = _STATUS_BADGE.get(current_status, current_status)
-                _pill_bg    = _hex_rgba(_pill_color, 0.15)
                 st.markdown(
                     f"<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:4px'>"
                     f"<span style='font-size:15px;font-weight:700'>STR Form</span>"
                     f"<span style='display:inline-flex;align-items:center;gap:6px;padding:4px 12px;"
-                    f"border-radius:20px;font-size:12px;font-weight:600;background:{_pill_bg};color:{_pill_color}'>"
+                    f"border-radius:20px;font-size:12px;font-weight:600;"
+                    f"background:{_hex_rgba(_pill_color, 0.15)};color:{_pill_color}'>"
                     f"<span style='width:7px;height:7px;border-radius:50%;background:{_pill_color};"
-                    f"display:inline-block'></span>{_pill_label}</span>"
+                    f"display:inline-block'></span>{_STATUS_BADGE.get(current_status, current_status)}</span>"
                     f"</div>",
                     unsafe_allow_html=True,
                 )
                 st.divider()
 
-                _is_locked = current_status in (STR_STATUS_APPROVED, STR_STATUS_ARCHIVED)
+                # ── Authorization / SoD banner ────────────────────────────────
+                _auth_banner(_auth_level, _auth_msg)
+
+                # ── Subject Particulars (editable, pre-filled from KYC) ────────
+                _section_label("Subject Particulars", "● pre-filled from KYC", "#4caf50")
+                _sp1, _sp2 = st.columns(2)
+                subject_name = _sp1.text_input("Full Name", value=str_record.get("subject_name", ""), disabled=_is_locked, key="str_subj_name")
+                subject_dob = _sp2.text_input("Date of Birth", value=str_record.get("subject_dob", ""), disabled=_is_locked, key="str_subj_dob")
+                _sp3, _sp4 = st.columns(2)
+                subject_nationality = _sp3.text_input("Nationality", value=str_record.get("subject_nationality", ""), disabled=_is_locked, key="str_subj_nat")
+                subject_id_type = _sp4.text_input("ID Type", value=str_record.get("subject_id_type", ""), disabled=_is_locked, key="str_subj_idtype")
+                _sp5, _sp6 = st.columns(2)
+                subject_id_number = _sp5.text_input("ID Number", value=str_record.get("subject_id_number", ""), disabled=_is_locked, key="str_subj_idnum")
+                _sp6.text_input("Customer ID", value=str(str_case.get("customer_id", "")), disabled=True, key="str_subj_custid")
+                subject_address = st.text_input("Residential Address", value=str_record.get("subject_address", ""), disabled=_is_locked, key="str_subj_addr")
 
                 # ── Transaction Details (read-only) ───────────────────────────
                 _section_label("Transaction Details")
@@ -261,57 +322,54 @@ with tab_workflow:
                 _td6.text_input("Receiver Account", value=f"Account {str_case.get('receiver_account', '')}", disabled=True, key="str_receiver")
                 _td7, _td8 = st.columns(2)
                 _td7.text_input("Payment Method", value=str(str_case.get("payment_type", "")), disabled=True, key="str_payment")
-                _td8.text_input(
-                    "AI Flagging Summary",
-                    value=f"RF score: {float(str_case.get('risk_score', 0)):.3f} — {str_case.get('risk_tier', '')}",
-                    disabled=True, key="str_ai_summary",
-                )
+                _td8.text_input("AI Flagging Summary",
+                                value=f"RF score: {float(str_case.get('risk_score', 0) or 0):.3f} — {str_case.get('risk_tier', '')}",
+                                disabled=True, key="str_ai_summary")
 
-                # ── Grounds for Suspicion (editable) ─────────────────────────
-                _section_label("Grounds for Suspicion", "● editable")
-                default_grounds = build_default_grounds(str_case)
-                grounds = st.text_area(
-                    "Grounds",
-                    value=str_record.get("grounds", default_grounds),
-                    height=120,
+                # ── Reason Codes (multiselect) ────────────────────────────────
+                _section_label("Reason Codes", "● select all that apply")
+                reason_codes = st.multiselect(
+                    "Reason Codes",
+                    options=STR_REASON_CODES,
+                    default=[c for c in _parse_reason_codes(str_record.get("reason_codes", "")) if c in STR_REASON_CODES],
                     disabled=_is_locked,
                     label_visibility="collapsed",
-                    key="str_grounds",
+                    key="str_reason_codes",
+                )
+
+                # ── Grounds for Suspicion (editable) ──────────────────────────
+                _section_label("Grounds for Suspicion", "● editable")
+                grounds = st.text_area(
+                    "Grounds",
+                    value=str_record.get("grounds", grounds_seed),
+                    height=120, disabled=_is_locked, label_visibility="collapsed", key="str_grounds",
                 )
 
                 # ── Filing Details ────────────────────────────────────────────
                 _section_label("Filing Details")
                 _fd1, _fd2 = st.columns(2)
-                analyst_field = actor_id
-                _fd1.text_input("Analyst ID", value=analyst_field, disabled=True, key="str_analyst")
-                _fd2.text_input(
-                    "Reference Number",
-                    value=str(str_record.get("reference_number") or "—"),
-                    disabled=True,
-                    key="str_ref_num",
-                )
+                _fd1.text_input("Reviewer (you)", value=actor_id, disabled=True, key="str_reviewer")
+                _fd2.text_input("Reference Number", value=str(str_record.get("reference_number") or "—"), disabled=True, key="str_ref_num")
 
-                # ── L2-only: Rejection reason ─────────────────────────────────
-                l2_reject_reason = ""
-                if current_status == STR_STATUS_L2:
-                    st.markdown(
-                        f"<div style='border:1px solid #f44336;border-radius:8px;"
-                        f"background:{_hex_rgba('#f44336', 0.05)};padding:12px 14px;margin-top:12px'>"
-                        f"<div style='font-size:12px;color:#f44336;margin-bottom:8px;font-weight:600'>"
-                        f"L2 Rejection — if rejecting</div>"
-                        f"</div>",
-                        unsafe_allow_html=True,
-                    )
-                    l2_reject_reason = st.text_input(
-                        "Rejection Reason",
-                        placeholder="Provide reason for returning STR to Draft...",
-                        key="str_l2_reject",
-                    )
+                # Collected form field updates (persisted on every save / transition).
+                _form_updates = {
+                    "subject_name": subject_name, "subject_dob": subject_dob,
+                    "subject_nationality": subject_nationality, "subject_id_type": subject_id_type,
+                    "subject_id_number": subject_id_number, "subject_address": subject_address,
+                    "reason_codes": ", ".join(reason_codes),
+                    "currency": str_record.get("currency", ""),
+                }
 
-                # ── L2-only: Analyst declaration ──────────────────────────────
+                # ── L2-only: return reason + declaration ──────────────────────
+                return_reason = ""
                 confirm = False
-                if current_status == STR_STATUS_L2:
-                    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+                if current_status in (STR_STATUS_L1, STR_STATUS_L2) and not _is_locked:
+                    return_reason = st.text_input(
+                        "Return-to-drafter reason (if returning)",
+                        placeholder="Provide a reason for returning this STR to Draft...",
+                        key="str_return_reason",
+                    )
+                if current_status == STR_STATUS_L2 and not _is_locked:
                     confirm = st.checkbox(
                         "I confirm this STR is accurate and complete to the best of my knowledge, "
                         "and I am authorised to file this report.",
@@ -320,18 +378,20 @@ with tab_workflow:
 
                 st.divider()
 
-                # ── Action buttons ────────────────────────────────────────────
-                _submit_label    = _SUBMIT_LABELS.get(current_status, "Already Approved")
-                _submit_disabled = _is_locked
-
-                if st.button(_submit_label, type="primary", use_container_width=True, disabled=_submit_disabled, key="str_submit"):
-                    if current_status == STR_STATUS_DRAFT:
+                # ── Action buttons (role + SoD gated) ─────────────────────────
+                _submit_label = _SUBMIT_LABELS.get(current_status, "Already Approved")
+                if st.button(_submit_label, type="primary", use_container_width=True,
+                             disabled=_is_locked or not _allowed, key="str_submit"):
+                    if not _allowed:
+                        st.error(_auth_msg)
+                    elif current_status == STR_STATUS_DRAFT:
                         str_record = upsert_str_workflow(
                             str_record, grounds, STR_STATUS_L1,
-                            {"reference_number": str_record.get("reference_number") or make_reference_number(str_case["transaction_id"])},
+                            {**_form_updates,
+                             "reference_number": str_record.get("reference_number") or make_reference_number(str_case["transaction_id"])},
                         )
                         log_action(action="str_submitted_l1", transaction_id=str_case["transaction_id"],
-                                   details=f"str_id={str_record['str_id']}", analyst_id=analyst_field,
+                                   details=f"str_id={str_record['str_id']}", analyst_id=actor_id,
                                    module="str_workflow", event_type="str_submitted_l1", entity_type="str",
                                    entity_id=str_record["str_id"], actor_role=actor_role, payload={"status": STR_STATUS_L1})
                         st.success("STR submitted to L1 Review.")
@@ -339,10 +399,11 @@ with tab_workflow:
                     elif current_status == STR_STATUS_L1:
                         str_record = upsert_str_workflow(
                             str_record, grounds, STR_STATUS_L2,
-                            {"l1_reviewer": analyst_field, "l1_reviewed_at": str(report_date), "l1_reason": "Approved by L1"},
+                            {**_form_updates, "l1_reviewer": actor_id, "l1_role": actor_role,
+                             "l1_reviewed_at": str(report_date), "l1_reason": "Approved by L1"},
                         )
                         log_action(action="str_approved_l1", transaction_id=str_case["transaction_id"],
-                                   details=f"str_id={str_record['str_id']}", analyst_id=analyst_field,
+                                   details=f"str_id={str_record['str_id']}", analyst_id=actor_id,
                                    module="str_workflow", event_type="str_approved_l1", entity_type="str",
                                    entity_id=str_record["str_id"], actor_role=actor_role, payload={"status": STR_STATUS_L2})
                         st.success("STR moved to L2 Review.")
@@ -354,23 +415,24 @@ with tab_workflow:
                             ref_no = str_record.get("reference_number") or make_reference_number(str_case["transaction_id"])
                             str_record = upsert_str_workflow(
                                 str_record, grounds, STR_STATUS_APPROVED,
-                                {"reference_number": ref_no, "l2_reviewer": analyst_field,
-                                 "l2_reviewed_at": str(report_date), "l2_reason": "Approved at L2"},
+                                {**_form_updates, "reference_number": ref_no, "l2_reviewer": actor_id,
+                                 "l2_role": actor_role, "l2_reviewed_at": str(report_date), "l2_reason": "Approved at L2"},
                             )
-                            archive_str_case(str_record, analyst_field, {
+                            archive_str_case(str_record, actor_id, {
                                 "customer_name": str_case.get("customer_name", ""),
+                                "subject_name": subject_name,
                                 "risk_tier": str_case.get("risk_tier", ""),
                                 "report_date": str(report_date),
                                 "reference_number": ref_no, "grounds": grounds,
                             })
-                            upsert_str_workflow(str_record, grounds, STR_STATUS_ARCHIVED, {"reference_number": ref_no})
+                            upsert_str_workflow(str_record, grounds, STR_STATUS_ARCHIVED, {**_form_updates, "reference_number": ref_no})
                             st.session_state["str_log"].append({
                                 "reference_number": ref_no, "transaction_id": str_case["transaction_id"],
-                                "rf_prediction": str_case["risk_score"], "cdd_level": str_case["cdd_level"],
-                                "filed_by": analyst_field, "report_date": str(report_date),
+                                "rf_prediction": str_case.get("risk_score", ""), "cdd_level": str_case.get("cdd_level", ""),
+                                "filed_by": actor_id, "report_date": str(report_date),
                             })
                             log_action(action="str_archived", transaction_id=str_case["transaction_id"],
-                                       details=f"reference_number={ref_no}", analyst_id=analyst_field,
+                                       details=f"reference_number={ref_no}", analyst_id=actor_id,
                                        module="str_workflow", event_type="str_archived", entity_type="str",
                                        entity_id=str_record["str_id"], actor_role=actor_role,
                                        payload={"reference_number": ref_no, "status": STR_STATUS_ARCHIVED})
@@ -379,62 +441,74 @@ with tab_workflow:
 
                 if not _is_locked:
                     if st.button("Save Draft", use_container_width=True, key="str_save_draft"):
-                        upsert_str_workflow(str_record, grounds, STR_STATUS_DRAFT)
+                        upsert_str_workflow(str_record, grounds, current_status, _form_updates)
                         st.success("Draft saved.")
                         st.rerun()
 
-                    if current_status == STR_STATUS_L2:
-                        if st.button("Reject at L2", use_container_width=True, key="str_reject_l2"):
-                            if not l2_reject_reason.strip():
-                                st.error("Provide an L2 rejection reason in the field above.")
+                    if current_status in (STR_STATUS_L1, STR_STATUS_L2):
+                        if st.button("Return to Drafter", use_container_width=True, key="str_return"):
+                            if not _allowed:
+                                st.error(_auth_msg)
+                            elif not return_reason.strip():
+                                st.error("Provide a return-to-drafter reason in the field above.")
                             else:
+                                _rkey = "l2" if current_status == STR_STATUS_L2 else "l1"
                                 str_record = upsert_str_workflow(
                                     str_record, grounds, STR_STATUS_DRAFT,
-                                    {"l2_reviewer": analyst_field, "l2_reviewed_at": str(report_date), "l2_reason": l2_reject_reason},
+                                    {**_form_updates, f"{_rkey}_reviewer": actor_id, f"{_rkey}_role": actor_role,
+                                     f"{_rkey}_reviewed_at": str(report_date), f"{_rkey}_reason": return_reason},
                                 )
-                                log_action(action="str_rejected_l2", transaction_id=str_case["transaction_id"],
-                                           details=f"str_id={str_record['str_id']}; reason={l2_reject_reason}",
-                                           analyst_id=analyst_field, module="str_workflow", event_type="str_rejected_l2",
+                                log_action(action="str_returned", transaction_id=str_case["transaction_id"],
+                                           details=f"str_id={str_record['str_id']}; reason={return_reason}",
+                                           analyst_id=actor_id, module="str_workflow", event_type="str_returned",
                                            entity_type="str", entity_id=str_record["str_id"], actor_role=actor_role,
-                                           payload={"reason": l2_reject_reason})
-                                st.warning("STR returned to Draft after L2 rejection.")
+                                           payload={"reason": return_reason})
+                                st.warning("STR returned to Draft.")
                                 st.rerun()
 
-        # ─────────────────────────── RIGHT: Review History ───────────────────
+        # ─────────────────────────── RIGHT: Maker–Checker Trail + SoD ─────────
         with _right_col:
-
-            # Review History
             with st.container(border=True):
-                st.markdown("**Review History**")
+                st.markdown("**Maker–Checker Trail**")
+                st.divider()
+                _l1_actor = str(str_record.get("l1_reviewer", "") or "")
+                _l2_actor = str(str_record.get("l2_reviewer", "") or "")
+                st.markdown(
+                    _trail_row("Drafted", "#4caf50", "Analyst",
+                               str(str_record.get("drafted_by", "") or ""),
+                               f"Drafted · {str(str_record.get('created_at', '') or '')[:10]}", "#888")
+                    + _trail_row("L1 Review", "#4da6ff", "Compliance Officer", _l1_actor,
+                                 (f"{str_record.get('l1_reason', '')} · {str_record.get('l1_reviewed_at', '')}"
+                                  if _l1_actor else "Awaiting L1 reviewer"),
+                                 "#888" if _l1_actor else "#444")
+                    + _trail_row("L2 Review", "#fb8c00", "Senior Management", _l2_actor,
+                                 (f"{str_record.get('l2_reason', '')} · {str_record.get('l2_reviewed_at', '')}"
+                                  if _l2_actor else "Awaiting L2 reviewer"),
+                                 "#888" if _l2_actor else "#444", last=True),
+                    unsafe_allow_html=True,
+                )
+
+            with st.container(border=True):
+                st.markdown("**Segregation of Duties**")
                 st.divider()
                 st.markdown(
-                    _review_row_html(
-                        "L1 Review", "#4da6ff",
-                        str(str_record.get("l1_reviewer", "") or ""),
-                        str(str_record.get("l1_reason", "") or ""),
-                        str(str_record.get("l1_reviewed_at", "") or ""),
-                        last=False,
-                    )
-                    + _review_row_html(
-                        "L2 Review", "#fb8c00",
-                        str(str_record.get("l2_reviewer", "") or ""),
-                        str(str_record.get("l2_reason", "") or ""),
-                        str(str_record.get("l2_reviewed_at", "") or ""),
-                        last=True,
-                    ),
+                    f"<div style='font-size:11.5px;color:#777;line-height:1.6'>"
+                    f"Each gate must be cleared by a <b style='color:#aaa'>different</b> person:<br>"
+                    f"• L1 reviewer ≠ drafter<br>"
+                    f"• L2 reviewer ≠ L1 reviewer and ≠ drafter<br><br>"
+                    f"Drafter of this STR: <b style='color:#aaa'>{str_record.get('drafted_by', '') or '—'}</b></div>",
                     unsafe_allow_html=True,
                 )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — All STRs
+# TAB 2 — All STRs (actionable: open in workflow + per-row download)
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_all:
     all_strs = get_all_str_records()
 
-    # Filters
     _frow1, _frow2 = st.columns([2, 1])
-    _search_term   = _frow1.text_input("Search by STR ID / Case ID / Transaction ID", value="", key="tracker_search")
+    _search_term = _frow1.text_input("Search by STR ID / Case ID / Transaction ID", value="", key="tracker_search")
     _status_filter = _frow2.multiselect("Filter by Status", STR_STATUSES, default=STR_STATUSES, key="tracker_status_filter")
 
     if all_strs.empty:
@@ -452,53 +526,42 @@ with tab_all:
         if _view.empty:
             st.info("No STRs match the current filters.")
         else:
-            _view["Status"] = _view["status"].map(_STATUS_BADGE).fillna(_view["status"])
-            st.dataframe(
-                _view[[
-                    "Status", "str_id", "case_id", "transaction_id",
-                    "reference_number", "l1_reviewer", "l2_reviewer", "updated_at",
-                ]].rename(columns={
-                    "str_id": "STR ID", "case_id": "Case ID", "transaction_id": "Txn ID",
-                    "reference_number": "Reference No.", "l1_reviewer": "L1 Reviewer",
-                    "l2_reviewer": "L2 Reviewer", "updated_at": "Last Updated",
-                }).sort_values("Last Updated", ascending=False),
-                use_container_width=True, hide_index=True,
-            )
-
+            # Header row
+            _hcols = st.columns([1.3, 1.1, 1.1, 1.1, 1.0, 1.0, 1.0, 1.8])
+            for _hc, _ht in zip(_hcols, ["Status", "STR ID", "Case ID", "Txn ID", "Drafter", "L1", "L2", "Action"]):
+                _hc.markdown(f"<span style='font-size:11px;color:#555;text-transform:uppercase;letter-spacing:0.8px'>{_ht}</span>",
+                             unsafe_allow_html=True)
             st.divider()
-            _sc, _bc = st.columns([4, 1])
-            _str_id_options  = _view["str_id"].astype(str).tolist()
-            _selected_str_id = _sc.selectbox("Select STR to view", _str_id_options, key="tracker_select_str")
-            _bc.write("")
-            if _bc.button("View →", key="tracker_view_btn"):
-                _rec = all_strs[all_strs["str_id"].astype(str) == _selected_str_id].iloc[0].to_dict()
-                st.session_state["selected_str_record"] = _rec
 
-            # Inline STR viewer
-            _record = st.session_state.get("selected_str_record")
-            if _record:
-                st.divider()
-                _rs = _record.get("status", "")
-                st.subheader(f"{_record.get('str_id', '—')}  {_STATUS_BADGE.get(_rs, _rs)}")
-                _vc1, _vc2, _vc3 = st.columns(3)
-                _vc1.metric("Case ID",       _record.get("case_id", "—") or "—")
-                _vc2.metric("Transaction ID", _record.get("transaction_id", "—") or "—")
-                _vc3.metric("Reference No.",  _record.get("reference_number", "—") or "—")
-                st.markdown("**Grounds for Suspicion**")
-                st.text_area("", value=_record.get("grounds", ""), height=120, disabled=True, key="view_str_grounds")
-                _rl, _rr = st.columns(2)
-                with _rl:
-                    with st.container(border=True):
-                        st.markdown("**L1 Review**")
-                        st.write(f"Reviewer: {_record.get('l1_reviewer', '') or '—'}")
-                        st.write(f"Date: {_record.get('l1_reviewed_at', '') or '—'}")
-                        st.write(f"Decision: {_record.get('l1_reason', '') or '—'}")
-                with _rr:
-                    with st.container(border=True):
-                        st.markdown("**L2 Review**")
-                        st.write(f"Reviewer: {_record.get('l2_reviewer', '') or '—'}")
-                        st.write(f"Date: {_record.get('l2_reviewed_at', '') or '—'}")
-                        st.write(f"Decision: {_record.get('l2_reason', '') or '—'}")
+            for _, _r in _view.iterrows():
+                _rec = _r.to_dict()
+                _rid = str(_rec.get("str_id", ""))
+                _status = str(_rec.get("status", ""))
+                _c = st.columns([1.3, 1.1, 1.1, 1.1, 1.0, 1.0, 1.0, 1.8])
+                _c[0].markdown(_STATUS_BADGE.get(_status, _status))
+                _c[1].write(_rid)
+                _c[2].write(str(_rec.get("case_id", "") or "—"))
+                _c[3].write(str(_rec.get("transaction_id", "") or "—"))
+                _c[4].write(str(_rec.get("drafted_by", "") or "—"))
+                _c[5].write(str(_rec.get("l1_reviewer", "") or "—"))
+                _c[6].write(str(_rec.get("l2_reviewer", "") or "—"))
+                with _c[7]:
+                    _a1, _a2 = st.columns(2)
+                    if _a1.button("Open →", key=f"open_{_rid}", use_container_width=True):
+                        st.session_state["str_case"] = build_str_case_from_record(_rec)
+                        st.success(f"{_rid} loaded — switch to the Current Case Workflow tab.")
+                    if _status in (STR_STATUS_APPROVED, STR_STATUS_ARCHIVED):
+                        _a2.download_button(
+                            "⬇ STR",
+                            data=build_str_document(_rec),
+                            file_name=f"{_rec.get('reference_number') or _rid}.html",
+                            mime="text/html",
+                            key=f"dl_{_rid}",
+                            use_container_width=True,
+                        )
+                    else:
+                        _a2.button("⬇ STR", key=f"dl_disabled_{_rid}", disabled=True,
+                                   help="Available once Approved", use_container_width=True)
 
     # Archived STRs
     st.divider()
@@ -508,8 +571,8 @@ with tab_all:
         st.info("No archived STR cases yet.")
     else:
         _as1, _as2, _as3 = st.columns(3)
-        _cust_search   = _as1.text_input("Search by customer", value="", key="arch_cust")
-        _risk_search   = _as2.selectbox("Risk Tier", ["All"] + sorted(archive_view["risk_tier"].dropna().astype(str).unique().tolist()), key="arch_risk")
+        _cust_search = _as1.text_input("Search by customer", value="", key="arch_cust")
+        _risk_search = _as2.selectbox("Risk Tier", ["All"] + sorted(archive_view["risk_tier"].dropna().astype(str).unique().tolist()), key="arch_risk")
         _status_search = _as3.selectbox("STR Status", ["All"] + sorted(archive_view["str_status"].dropna().astype(str).unique().tolist()), key="arch_status")
 
         _arch_filt = archive_view.copy()
@@ -520,11 +583,9 @@ with tab_all:
         if _status_search != "All":
             _arch_filt = _arch_filt[_arch_filt["str_status"].astype(str) == _status_search]
 
-        st.dataframe(
-            _arch_filt[[
-                "archive_id", "str_id", "case_id", "transaction_id",
-                "customer_id", "customer_name", "risk_tier", "str_status",
-                "archived_at", "archived_by",
-            ]],
-            use_container_width=True,
-        )
+        _arch_cols = [c for c in [
+            "archive_id", "str_id", "case_id", "transaction_id",
+            "customer_id", "customer_name", "risk_tier", "str_status",
+            "archived_at", "archived_by",
+        ] if c in _arch_filt.columns]
+        st.dataframe(_arch_filt[_arch_cols], use_container_width=True)
