@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from pathlib import Path
 
 import pandas as pd
@@ -8,24 +7,10 @@ import streamlit as st
 
 from utils.audit_logger import log_action
 from utils.sidebar import render_sidebar
-from utils.aml_services import ensure_scored_defaults, sync_customer_profiles
 from utils.constants import (
-    ALERT_STATUS_NEW,
     CUSTOMER_RISK_STATUSES,
-    DATA_PREVIEW_LIMIT,
     FLAG_REASON_PEP,
     SM_APPROVAL_PENDING,
-)
-from utils.data_store import get_model_registry
-from utils.feature_engineering import (
-    CATEGORICAL_FEATURES,
-    ENGINEERED_FEATURES,
-    RED_FLAG_COLS,
-    apply_risk_tier,
-    SAML_REQUIRED_COLUMNS,
-    engineer_features,
-    prepare_model_matrix,
-    validate_schema,
 )
 from utils.kyc_store import (
     CUSTOMER_RISK_STATUSES as KYC_RISK_STATUSES,
@@ -35,7 +20,6 @@ from utils.kyc_store import (
     RISK_CRITICAL,
     RISK_HIGH,
     SANCTIONS_REVIEW_PENDING,
-    apply_cdd_escalation_from_transactions,
     enrol_customer,
     ensure_kyc_database,
     get_kyc_by_id,
@@ -53,15 +37,14 @@ from utils.mas_sanctions_sync import (
     screen_name,
     sync_mas_sanctions,
 )
-from utils.model_loader import load_models
 from utils.session_utils import get_current_analyst
 
 render_sidebar()
 ensure_kyc_database()
 actor_id, actor_role = get_current_analyst()
 
-st.title("KYC & Transaction Scoring")
-st.caption("Enrol and manage customers, screen against sanctions lists, upload transaction data, and score AML risk.")
+st.title("KYC Screening")
+st.caption("Enrol and manage customers, screen against sanctions lists, and maintain KYC risk profiles.")
 
 st.markdown(
     """
@@ -692,8 +675,8 @@ with st.container(border=True):
 
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
-_tab_registry, _tab_scoring, _tab_sanctions = st.tabs(
-    ["Customer Registry", "Transaction Scoring", "Sanctions Lists"]
+_tab_registry, _tab_sanctions = st.tabs(
+    ["Customer Registry", "Sanctions Lists"]
 )
 
 
@@ -905,206 +888,7 @@ with _tab_registry:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — Transaction Scoring
-# ══════════════════════════════════════════════════════════════════════════════
-with _tab_scoring:
-    _col_upload, _col_results = st.columns(2, gap="medium")
-
-    with _col_upload:
-        with st.container(border=True):
-            st.markdown("**Upload Transaction Dataset**")
-            st.caption("SAML-D format CSV. Schema is validated before scoring begins.")
-            _uploaded = st.file_uploader("", type=["csv"], label_visibility="collapsed")
-            with st.expander("Expected CSV columns"):
-                st.code(", ".join(SAML_REQUIRED_COLUMNS))
-
-            st.divider()
-
-            st.markdown("**Scoring Options**")
-            _oc1, _oc2 = st.columns(2)
-            _cap_rows  = _oc1.number_input("Row cap", min_value=1000, max_value=200_000, value=50_000, step=1000)
-            _threshold = _oc2.slider("Risk threshold", min_value=0.05, max_value=0.95, value=0.50, step=0.05)
-            _score_btn = st.button(
-                "Score Dataset", type="primary", use_container_width=True,
-                disabled=_uploaded is None,
-            )
-
-    with _col_results:
-        with st.container(border=True, height=420):
-            st.markdown("**Scoring Results**")
-
-            # Process on button click
-            if _score_btn and _uploaded is not None:
-                _t0  = time.time()
-                _raw = pd.read_csv(_uploaded)
-                _ok, _missing = validate_schema(_raw)
-                if not _ok:
-                    st.error(f"Schema mismatch. Missing columns: {_missing}")
-                    st.stop()
-                if len(_raw) > _cap_rows:
-                    _raw = _raw.head(int(_cap_rows)).copy()
-                    st.warning(f"Dataset capped to {_cap_rows:,} rows.")
-                _feat = engineer_features(_raw)
-                _rf_model, _, _ = load_models()
-                _x_rf = prepare_model_matrix(
-                    _feat[ENGINEERED_FEATURES + CATEGORICAL_FEATURES],
-                    _rf_model.feature_names_in_,
-                )
-                _risk_prob = (
-                    _rf_model.predict_proba(_x_rf)[:, 1]
-                    if hasattr(_rf_model, "predict_proba")
-                    else _rf_model.predict(_x_rf).astype(float)
-                )
-                _pred = (_risk_prob >= _threshold).astype(int)
-                _feat["rf_prediction"]            = _pred
-                _feat["risk_score"]               = _risk_prob
-                _feat["risk_threshold"]           = _threshold
-                _feat = apply_risk_tier(_feat)
-                _feat["prediction_wrong"]         = ""
-                _feat["prediction_feedback_reason"] = ""
-                _feat = ensure_scored_defaults(_feat)
-                _aid3, _arole3 = get_current_analyst()
-                _statuses = {
-                    _txid: {"status": ALERT_STATUS_NEW, "reason": ""}
-                    for _txid in _feat["transaction_id"].astype(str)
-                }
-                st.session_state["scored_df"]    = _feat
-                st.session_state["alert_status"] = _statuses
-                _customer_profiles = sync_customer_profiles(_feat)
-                _cdd_changes       = apply_cdd_escalation_from_transactions(_feat)
-                _elapsed           = time.time() - _t0
-                _registry          = get_model_registry().get("models", [])
-                _cur_model         = _registry[-1] if _registry else {}
-                st.session_state["_scoring_meta"] = {
-                    "elapsed":      _elapsed,
-                    "profiles":     len(_customer_profiles),
-                    "cdd_changes":  _cdd_changes,
-                    "filename":     _uploaded.name,
-                    "flagged":      int((_feat["rf_prediction"] == 1).sum()),
-                    "tier_counts":  _feat["risk_tier"].value_counts().to_dict(),
-                    "threshold":    _threshold,
-                    "model_label":  f"{_cur_model.get('model_id', 'rf_model')} {_cur_model.get('version', '')}".strip(),
-                }
-                log_action(
-                    action="dataset_uploaded",
-                    details=f"filename={_uploaded.name}; row_count={len(_feat)}; flagged={int((_feat['rf_prediction']==1).sum())}",
-                    analyst_id=_aid3, module="data_upload",
-                    event_type="dataset_uploaded", entity_type="dataset",
-                    entity_id=_uploaded.name, actor_role=_arole3,
-                    payload={
-                        "filename": _uploaded.name, "row_count": len(_feat),
-                        "flagged_count": int((_feat["rf_prediction"] == 1).sum()),
-                        "tiers": _feat["risk_tier"].value_counts().to_dict(), "threshold": _threshold,
-                    },
-                )
-                for _, _txrow in _feat.iterrows():
-                    log_action(
-                        action="prediction_generated",
-                        transaction_id=str(_txrow["transaction_id"]),
-                        details=f"risk_score={float(_txrow['risk_score']):.4f}; risk_tier={_txrow['risk_tier']}",
-                        analyst_id=_aid3, module="risk_scoring",
-                        event_type="prediction_generated", entity_type="transaction",
-                        entity_id=str(_txrow["transaction_id"]), actor_role=_arole3,
-                        payload={
-                            "risk_score": round(float(_txrow["risk_score"]), 4),
-                            "risk_tier": _txrow["risk_tier"], "threshold": _threshold,
-                            "prediction": int(_txrow["rf_prediction"]),
-                        },
-                    )
-
-            # Display results
-            _feat_display = st.session_state.get("scored_df")
-            _meta         = st.session_state.get("_scoring_meta", {})
-
-            if _feat_display is None and _uploaded is None:
-                st.markdown(
-                    "<div style='text-align:center;padding:48px 0;color:#444'>"
-                    "<div style='font-size:32px;margin-bottom:8px'>📂</div>"
-                    "<div>Upload a CSV to see results</div></div>",
-                    unsafe_allow_html=True,
-                )
-            elif _feat_display is None and _uploaded is not None:
-                st.info("File ready. Configure options and click **Score Dataset**.")
-            else:
-                _model_label = _meta.get("model_label", "rf_model")
-                st.caption(
-                    f"Processed in {_meta.get('elapsed', 0):.2f}s"
-                    f" &nbsp;·&nbsp; Model: {_model_label}"
-                    f" &nbsp;·&nbsp; Threshold: {_meta.get('threshold', _threshold)}"
-                )
-                st.caption(
-                    "MAS red-flag features active: "
-                    + ", ".join(RED_FLAG_COLS)
-                )
-
-                # Summary metrics
-                _sm1, _sm2, _sm3, _sm4 = st.columns(4)
-                with _sm1:
-                    with st.container(border=True):
-                        st.metric("Transactions Scored", f"{len(_feat_display):,}")
-                with _sm2:
-                    with st.container(border=True):
-                        st.metric("Flagged",             f"{_meta.get('flagged', 0):,}")
-                with _sm3:
-                    with st.container(border=True):
-                        st.metric("Profiles Synced",     f"{_meta.get('profiles', 0):,}")
-                with _sm4:
-                    with st.container(border=True):
-                        st.metric("Processing Time",     f"{_meta.get('elapsed', 0):.2f}s")
-
-                # Risk tier bars
-                st.markdown("**Risk Tier Breakdown**")
-                _tier_counts = _meta.get("tier_counts", _feat_display["risk_tier"].value_counts().to_dict())
-                _max_count   = max(_tier_counts.values(), default=1) or 1
-                _tier_colors = {"High": "#f44336", "Medium": "#fb8c00", "Low": "#64dd17"}
-                _bars_html   = ""
-                for _tier, _color in _tier_colors.items():
-                    _cnt = _tier_counts.get(_tier, 0)
-                    _pct = int(_cnt / _max_count * 100)
-                    _bars_html += (
-                        f"<div style='display:flex;align-items:center;gap:10px;margin-bottom:8px'>"
-                        f"<span style='color:#888;font-size:12px;width:60px;text-align:right'>{_tier}</span>"
-                        f"<div style='flex:1;background:#1e2130;border-radius:4px;height:12px'>"
-                        f"<div style='width:{_pct}%;background:{_color};height:100%;border-radius:4px'></div>"
-                        f"</div>"
-                        f"<span style='color:{_color};font-weight:700;font-size:13px;width:40px'>{_cnt:,}</span>"
-                        f"</div>"
-                    )
-                st.markdown(_bars_html, unsafe_allow_html=True)
-
-                # KYC auto-escalations
-                _cdd_ch = _meta.get("cdd_changes", [])
-                if _cdd_ch:
-                    _lines = "".join(
-                        f"· <code>{c['id']}</code> {c['FullName']}: Risk {c['old_risk']} → "
-                        f"<strong style='color:#fb8c00'>{c['new_risk']}</strong>, "
-                        f"CDD {c['old_cdd']} → <strong style='color:#fb8c00'>{c['new_cdd']}</strong><br>"
-                        for c in _cdd_ch
-                    )
-                    st.markdown(
-                        f"<div style='border:1px solid #fb8c00;border-left:4px solid #fb8c00;"
-                        f"border-radius:8px;padding:12px 16px;background:rgba(251,140,0,0.05);"
-                        f"font-size:12.5px;margin:12px 0'>"
-                        f"<strong style='color:#fb8c00'>KYC Auto-Escalations ({len(_cdd_ch)})</strong>"
-                        f"<p style='margin-top:8px;color:#ccc;line-height:1.8'>{_lines}</p></div>",
-                        unsafe_allow_html=True,
-                    )
-
-    if _feat_display is not None:
-        with st.container(border=True):
-            st.markdown("**Transaction Preview**")
-            st.dataframe(
-                _feat_display[[
-                    "transaction_id", "Date", "Sender_account",
-                    "Amount", "risk_score", "risk_tier", "rf_prediction",
-                ]].head(DATA_PREVIEW_LIMIT),
-                use_container_width=True,
-                hide_index=True,
-            )
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 3 — Sanctions Lists
+# TAB 2 — Sanctions Lists
 # ══════════════════════════════════════════════════════════════════════════════
 with _tab_sanctions:
     _catalog      = list_catalog_entries()

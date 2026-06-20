@@ -28,7 +28,8 @@ auto-discovers the workflow pages in `pages/`.
 
 | Page | Purpose |
 |---|---|
-| KYC & Transaction Scoring | Upload a SAML-D CSV, score every transaction. |
+| KYC Screening | Enrol and manage customers, risk profiles, and sanctions screening. |
+| Transaction Data Upload | Upload a SAML-D CSV and score every transaction. |
 | Alert Queue | Triage flagged transactions; escalate or dismiss. |
 | Case Investigation | Investigate a transaction with feature-level explanations. |
 | STR Generation | Draft → L1 → L2 → Approve a Suspicious Transaction Report. |

@@ -14,7 +14,7 @@ def get_current_analyst() -> tuple[str, str]:
 def require_scored_df() -> None:
     """Stop the page early if no scored dataset is in session state."""
     if st.session_state.get("scored_df") is None:
-        st.error("No scored dataset found. Please upload and score data on Page 1 first.")
+        st.error("No scored dataset found. Please upload and score data on the Transaction Data Upload page first.")
         st.stop()
 
 
