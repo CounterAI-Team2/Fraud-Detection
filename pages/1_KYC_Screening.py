@@ -21,6 +21,7 @@ from utils.kyc_store import (
     RISK_HIGH,
     SANCTIONS_ACTIVE_REVIEW_STATUSES,
     SANCTIONS_REVIEW_CONFIRMED,
+    SANCTIONS_REVIEW_ESCALATED,
     SANCTIONS_REVIEW_FUZZY,
     SANCTIONS_REVIEW_PENDING,
     apply_confirmed_sanctions_match,
@@ -246,7 +247,67 @@ def _open_customer_profile(customer_id: str) -> None:
     st.session_state["kyc_view_customer_id"] = str(customer_id)
 
 
+def _sanctions_match_queue_item(row: pd.Series) -> dict:
+    score_raw = row.get("SanctionsMatchScore", "")
+    match_type = str(row.get("SanctionsMatchType", "") or "").strip().lower()
+    try:
+        score = float(score_raw or 0)
+        confidence = score / 100 if score > 1 else score
+    except (TypeError, ValueError):
+        confidence = 1.0 if match_type == "exact" else 0.0
+    if not match_type and str(row.get("SanctionsReview", "")) == SANCTIONS_REVIEW_CONFIRMED:
+        match_type = "exact"
+    return {
+        "customer_id": str(row["id"]),
+        "matched_name": str(row.get("SanctionsMatchedName", "")),
+        "list_key": str(row.get("SanctionsListKey", "")),
+        "confidence": confidence,
+        "match_type": match_type or "fuzzy",
+    }
+
+
+def _open_sanctions_review(customer_id: str) -> None:
+    row = get_kyc_by_id(customer_id)
+    if row is None:
+        return
+    item = _sanctions_match_queue_item(row)
+    rest = [
+        q
+        for q in st.session_state.get("kyc_fuzzy_sanctions_queue", [])
+        if str(q.get("customer_id")) != str(customer_id)
+    ]
+    st.session_state["kyc_fuzzy_sanctions_queue"] = [item] + rest
+
+
+def _flagged_sanctions_customers(customers: pd.DataFrame) -> pd.DataFrame:
+    flagged = customers[
+        customers["SanctionsReview"].astype(str).isin(SANCTIONS_ACTIVE_REVIEW_STATUSES)
+    ].copy()
+    if flagged.empty:
+        return flagged
+    _status_rank = {
+        SANCTIONS_REVIEW_FUZZY: 0,
+        SANCTIONS_REVIEW_PENDING: 1,
+        SANCTIONS_REVIEW_ESCALATED: 2,
+        SANCTIONS_REVIEW_CONFIRMED: 3,
+    }
+    flagged["_sanc_sort"] = flagged["SanctionsReview"].astype(str).map(
+        lambda s: _status_rank.get(s, 9)
+    )
+    return flagged.sort_values(["_sanc_sort", "FullName"], kind="stable").drop(
+        columns=["_sanc_sort"]
+    )
+
+
+def _catalog_label_for_key(list_key: str, labels: dict[str, str]) -> str:
+    key = str(list_key or "").strip()
+    if not key:
+        return "—"
+    return labels.get(key, key)
+
+
 KYC_TABLE_COL_WEIGHTS = [3.2, 2.0, 0.85, 1.05, 1.05, 0.9]
+FLAGS_TABLE_COL_WEIGHTS = [2.6, 1.4, 0.95, 2.0, 1.6, 0.65, 0.75]
 
 
 def _render_kyc_table_row(row: pd.Series) -> None:
@@ -748,15 +809,25 @@ def _fuzzy_sanctions_review_dialog() -> None:
         return
 
     _confidence = float(item.get("confidence", 0) or 0) * 100
-    st.warning(
-        f"Possible sanctions match for **{row.get('FullName', '—')}** "
-        f"({_confidence:.0f}% similarity)."
-    )
+    _review_status = str(row.get("SanctionsReview", ""))
+    _list_labels = {e.get("key"): e.get("label", e.get("key")) for e in list_catalog_entries()}
+    _list_disp = _catalog_label_for_key(str(item.get("list_key", "")), _list_labels)
+    if _review_status == SANCTIONS_REVIEW_CONFIRMED:
+        st.warning(
+            f"Relitigate confirmed sanctions match for **{row.get('FullName', '—')}**."
+        )
+    elif item.get("match_type") == "exact":
+        st.warning(f"Exact sanctions match for **{row.get('FullName', '—')}**.")
+    else:
+        st.warning(
+            f"Possible sanctions match for **{row.get('FullName', '—')}** "
+            f"({_confidence:.0f}% similarity)."
+        )
     st.markdown(
         f"- **Customer ID:** `{customer_id}`  \n"
         f"- **Account:** `{row.get('AccountNo', '—')}`  \n"
         f"- **Matched list name:** `{item.get('matched_name', '')}`  \n"
-        f"- **List:** {item.get('list_key') or 'MAS Sanctions'}"
+        f"- **List:** {_list_disp}"
     )
     st.caption(f"{len(queue)} customer(s) awaiting sanctions confirmation.")
 
@@ -834,8 +905,8 @@ with st.container(border=True):
 
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
-_tab_registry, _tab_sanctions = st.tabs(
-    ["Customer Registry", "Sanctions Lists"]
+_tab_registry, _tab_flags, _tab_sanctions = st.tabs(
+    ["Customer Registry", "Sanctions Flags", "Sanctions Lists"]
 )
 
 
@@ -872,14 +943,7 @@ with _tab_registry:
         ]
         if not _db_fuzzy.empty:
             st.session_state["kyc_fuzzy_sanctions_queue"] = [
-                {
-                    "customer_id": str(row["id"]),
-                    "matched_name": str(row.get("SanctionsMatchedName", "")),
-                    "list_key": str(row.get("SanctionsListKey", "")),
-                    "confidence": float(row.get("SanctionsMatchScore", 0) or 0) / 100,
-                    "match_type": "fuzzy",
-                }
-                for _, row in _db_fuzzy.iterrows()
+                _sanctions_match_queue_item(row) for _, row in _db_fuzzy.iterrows()
             ]
 
     # KPI row
@@ -1087,13 +1151,6 @@ with _tab_registry:
                     st.session_state["kyc_page"] = _total_pages
                     st.rerun()
 
-    if st.session_state.get("kyc_view_customer_id"):
-        _customer_detail_dialog(st.session_state["kyc_view_customer_id"])
-
-    if st.session_state.get("kyc_fuzzy_sanctions_queue"):
-        _fuzzy_sanctions_review_dialog()
-
-
 def _catalog_row_status(entry: dict) -> str:
     return str(
         entry.get("status")
@@ -1103,7 +1160,111 @@ def _catalog_row_status(entry: dict) -> str:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — Sanctions Lists
+# TAB 2 — Sanctions Flags
+# ══════════════════════════════════════════════════════════════════════════════
+with _tab_flags:
+    _flag_customers = get_kyc_customers()
+    _flagged = _flagged_sanctions_customers(_flag_customers)
+    _list_labels = {
+        e.get("key"): e.get("label", e.get("key")) for e in list_catalog_entries()
+    }
+
+    with st.container(border=True):
+        st.markdown("**Sanctions flags**")
+        st.caption(
+            "All customers with an active sanctions hit. "
+            "Use **Review** to relitigate any flag in the analyst review dialog."
+        )
+        if _flagged.empty:
+            st.info("No active sanctions flags in the customer database.")
+        else:
+            _fuzzy_n = int(
+                (_flagged["SanctionsReview"].astype(str) == SANCTIONS_REVIEW_FUZZY).sum()
+            )
+            _confirmed_n = int(
+                (_flagged["SanctionsReview"].astype(str) == SANCTIONS_REVIEW_CONFIRMED).sum()
+            )
+            st.caption(
+                f"**{len(_flagged):,}** flagged"
+                f" · **{_fuzzy_n:,}** fuzzy review"
+                f" · **{_confirmed_n:,}** confirmed"
+            )
+
+            _fhdr = st.columns(FLAGS_TABLE_COL_WEIGHTS, gap="small")
+            _fheader_labels = [
+                "Name / ID",
+                "Account",
+                "Status",
+                "Matched name",
+                "List",
+                "Score",
+                "Review",
+            ]
+            for _i, (_fhcol, _fhtext) in enumerate(zip(_fhdr, _fheader_labels)):
+                _falign = "center" if _i >= 2 else "flex-start"
+                _fhcol.markdown(
+                    f"<div class='kyc-th kyc-th-{_i}' style='justify-content:{_falign}'>"
+                    f"{_fhtext}</div>",
+                    unsafe_allow_html=True,
+                )
+
+            for _, _frow in _flagged.iterrows():
+                _fcid = str(_frow["id"])
+                _fname = str(_frow.get("FullName", ""))
+                _facct = str(_frow.get("AccountNo", ""))
+                _fstatus = str(_frow.get("SanctionsReview", ""))
+                _fmatched = str(_frow.get("SanctionsMatchedName", "")) or "—"
+                _flist = _catalog_label_for_key(
+                    str(_frow.get("SanctionsListKey", "")), _list_labels
+                )
+                _fscore_raw = _frow.get("SanctionsMatchScore", "")
+                _fmatch_type = str(_frow.get("SanctionsMatchType", "") or "").lower()
+                if _fmatch_type == "exact" or _fstatus == SANCTIONS_REVIEW_CONFIRMED:
+                    _fscore = "Exact"
+                else:
+                    try:
+                        _fs = float(_fscore_raw or 0)
+                        _fscore = f"{_fs:.0f}%" if _fs > 1 else f"{_fs * 100:.0f}%"
+                    except (TypeError, ValueError):
+                        _fscore = "—"
+
+                if _fstatus == SANCTIONS_REVIEW_FUZZY:
+                    _fstatus_d = "Fuzzy"
+                elif _fstatus == SANCTIONS_REVIEW_CONFIRMED:
+                    _fstatus_d = "Confirmed"
+                elif _fstatus == SANCTIONS_REVIEW_PENDING:
+                    _fstatus_d = "Pending"
+                else:
+                    _fstatus_d = _fstatus or "—"
+
+                _fcols = st.columns(FLAGS_TABLE_COL_WEIGHTS, gap="small")
+                _fcells = [
+                    f"{_fname}\n{_fcid}",
+                    _facct,
+                    _fstatus_d,
+                    _fmatched,
+                    _flist,
+                    _fscore,
+                ]
+                for _fi, (_fcol, _ftext) in enumerate(zip(_fcols[:-1], _fcells)):
+                    _falign = "center" if _fi >= 2 else "flex-start"
+                    _fcol.markdown(
+                        f"<div class='kyc-td' style='justify-content:{_falign}'>"
+                        f"{_ftext}</div>",
+                        unsafe_allow_html=True,
+                    )
+                with _fcols[-1]:
+                    st.button(
+                        "Review",
+                        key=f"flag_review_{_fcid}",
+                        use_container_width=True,
+                        on_click=_open_sanctions_review,
+                        args=(_fcid,),
+                    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 3 — Sanctions Lists
 # ══════════════════════════════════════════════════════════════════════════════
 with _tab_sanctions:
     _catalog      = list_catalog_entries()
@@ -1231,3 +1392,10 @@ with _tab_sanctions:
                             st.session_state["kyc_fuzzy_sanctions_queue"] = _fuzzy_queue
                         st.info("Sanctions rescreen after upload: " + " · ".join(_parts) + ".")
                     st.rerun()
+
+
+if st.session_state.get("kyc_view_customer_id"):
+    _customer_detail_dialog(st.session_state["kyc_view_customer_id"])
+
+if st.session_state.get("kyc_fuzzy_sanctions_queue"):
+    _fuzzy_sanctions_review_dialog()
