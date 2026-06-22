@@ -66,6 +66,10 @@ KYC_COLUMNS = [
     "RiskStatus",
     "CDDLevel",
     "SanctionsReview",
+    "SanctionsMatchedName",
+    "SanctionsListKey",
+    "SanctionsMatchScore",
+    "SanctionsMatchType",
     "LastCDDReviewAt",
     "Comments",
     "flagged_transaction_count",
@@ -111,8 +115,17 @@ CDD_ENHANCED = "Enhanced"
 
 SANCTIONS_REVIEW_NONE = ""
 SANCTIONS_REVIEW_PENDING = "Pending"
+SANCTIONS_REVIEW_FUZZY = "Fuzzy — Review Required"
+SANCTIONS_REVIEW_CONFIRMED = "Confirmed"
 SANCTIONS_REVIEW_CLEARED = "Cleared"
 SANCTIONS_REVIEW_ESCALATED = "Escalated"
+
+SANCTIONS_ACTIVE_REVIEW_STATUSES = frozenset({
+    SANCTIONS_REVIEW_PENDING,
+    SANCTIONS_REVIEW_FUZZY,
+    SANCTIONS_REVIEW_CONFIRMED,
+    SANCTIONS_REVIEW_ESCALATED,
+})
 
 _DEMO_ENRICHMENT: dict[str, dict[str, str]] = {}
 
@@ -820,14 +833,232 @@ def update_kyc_record(customer_id: str, updates: dict[str, str]) -> dict[str, st
 def _screen_customer_names(full_name: str, aliases: str = "") -> dict:
     from utils.mas_sanctions_sync import screen_name
 
-    primary = screen_name(full_name)
-    if primary.get("matched"):
-        return primary
+    best = screen_name(full_name)
     for alias in (a.strip() for a in aliases.split(";") if a.strip()):
         hit = screen_name(alias)
-        if hit.get("matched"):
-            return hit
-    return primary
+        if hit.get("matched") and (
+            not best.get("matched")
+            or hit.get("confidence", 0) > best.get("confidence", 0)
+        ):
+            best = hit
+    return best
+
+
+def _append_comment(existing: str, line: str) -> str:
+    prior = str(existing or "").strip()
+    if not prior:
+        return line
+    if line in prior:
+        return prior
+    return f"{prior}\n{line}"
+
+
+def _append_indicator(existing: str, indicator: str) -> str:
+    parts = [p.strip() for p in str(existing or "").split(";") if p.strip()]
+    if indicator not in parts:
+        parts.append(indicator)
+    return "; ".join(parts)
+
+
+def _sanctions_comment(match_info: dict, *, confirmed: bool) -> str:
+    matched_name = match_info.get("matched_name", "")
+    list_key = match_info.get("list_key") or "MAS Sanctions"
+    confidence = float(match_info.get("confidence", 0) or 0) * 100
+    match_type = match_info.get("match_type", "")
+    if confirmed:
+        return (
+            f"[MAS Sanctions — Confirmed] Designated list match: '{matched_name}' "
+            f"on {list_key} ({confidence:.0f}% {match_type} match). "
+            "Customer flagged for Enhanced CDD and sanctions monitoring."
+        )
+    return (
+        f"[MAS Sanctions — Fuzzy match pending] Possible match: '{matched_name}' "
+        f"on {list_key} ({confidence:.0f}% {match_type}). "
+        "Awaiting analyst confirmation."
+    )
+
+
+def _risk_rank(value: str) -> int:
+    return {RISK_LOW: 0, RISK_MEDIUM: 1, RISK_HIGH: 2, RISK_CRITICAL: 3}.get(str(value), 0)
+
+
+def apply_confirmed_sanctions_match(
+    customer_id: str,
+    match_info: dict,
+    *,
+    actor_id: str = "system",
+) -> dict[str, str] | None:
+    """Elevate CDD/risk and annotate a confirmed sanctions list match."""
+    customers = get_kyc_customers()
+    mask = customers["id"].astype(str) == str(customer_id)
+    if not mask.any():
+        return None
+
+    idx = customers.index[mask][0]
+    row = customers.loc[idx]
+    current_risk = str(row.get("RiskStatus", RISK_LOW))
+    new_risk = current_risk
+    if _risk_rank(current_risk) < _risk_rank(RISK_HIGH):
+        new_risk = RISK_HIGH
+
+    current_cdd = str(row.get("CDDLevel", CDD_SIMPLIFIED))
+    new_cdd = CDD_ENHANCED if current_cdd != CDD_ENHANCED else current_cdd
+    confidence_pct = int(round(float(match_info.get("confidence", 0) or 0) * 100))
+
+    updates = {
+        "SanctionsReview": SANCTIONS_REVIEW_CONFIRMED,
+        "SanctionsMatchedName": str(match_info.get("matched_name", "")),
+        "SanctionsListKey": str(match_info.get("list_key") or "MAS Sanctions"),
+        "SanctionsMatchScore": str(confidence_pct),
+        "SanctionsMatchType": str(match_info.get("match_type", "exact")),
+        "CDDLevel": new_cdd,
+        "RiskStatus": new_risk,
+        "Comments": _append_comment(row.get("Comments", ""), _sanctions_comment(match_info, confirmed=True)),
+        "FlaggedReason": "Sanctions List Match",
+        "FlaggedBy": actor_id,
+        "RiskIndicators": _append_indicator(row.get("RiskIndicators", ""), "MAS Sanctions — confirmed list match"),
+        "LastCDDReviewAt": _utc_now_iso(),
+    }
+    return update_kyc_record(customer_id, updates)
+
+
+def apply_fuzzy_sanctions_match(customer_id: str, match_info: dict) -> dict[str, str] | None:
+    """Flag a possible sanctions match for analyst confirmation (no CDD elevation yet)."""
+    customers = get_kyc_customers()
+    mask = customers["id"].astype(str) == str(customer_id)
+    if not mask.any():
+        return None
+
+    row = customers.loc[mask].iloc[0]
+    confidence_pct = int(round(float(match_info.get("confidence", 0) or 0) * 100))
+    updates = {
+        "SanctionsReview": SANCTIONS_REVIEW_FUZZY,
+        "SanctionsMatchedName": str(match_info.get("matched_name", "")),
+        "SanctionsListKey": str(match_info.get("list_key") or "MAS Sanctions"),
+        "SanctionsMatchScore": str(confidence_pct),
+        "SanctionsMatchType": "fuzzy",
+        "Comments": _append_comment(row.get("Comments", ""), _sanctions_comment(match_info, confirmed=False)),
+        "LastCDDReviewAt": _utc_now_iso(),
+    }
+    return update_kyc_record(customer_id, updates)
+
+
+def clear_sanctions_match(customer_id: str, *, actor_id: str = "system", reason: str = "") -> dict[str, str] | None:
+    """Analyst cleared a fuzzy or pending sanctions hit as a false positive."""
+    customers = get_kyc_customers()
+    mask = customers["id"].astype(str) == str(customer_id)
+    if not mask.any():
+        return None
+
+    row = customers.loc[mask].iloc[0]
+    note = reason.strip() or "Analyst determined no true sanctions list match."
+    updates = {
+        "SanctionsReview": SANCTIONS_REVIEW_CLEARED,
+        "SanctionsMatchedName": "",
+        "SanctionsListKey": "",
+        "SanctionsMatchScore": "",
+        "SanctionsMatchType": "cleared",
+        "Comments": _append_comment(
+            row.get("Comments", ""),
+            f"[MAS Sanctions — Cleared] {note} (reviewed by {actor_id})",
+        ),
+        "LastCDDReviewAt": _utc_now_iso(),
+    }
+    return update_kyc_record(customer_id, updates)
+
+
+def rescreen_all_kyc_customers() -> dict:
+    """
+    Screen every enrolled customer against consolidated sanctions names.
+
+    Exact matches are auto-confirmed with Enhanced CDD. Fuzzy matches are queued
+    for analyst confirmation in the UI.
+    """
+    customers = get_kyc_customers()
+    exact_count = 0
+    fuzzy_count = 0
+    skipped_count = 0
+    fuzzy_queue: list[dict] = []
+
+    for _, row in customers.iterrows():
+        customer_id = str(row["id"])
+        review = str(row.get("SanctionsReview", "")).strip()
+        if review in {SANCTIONS_REVIEW_CONFIRMED, SANCTIONS_REVIEW_CLEARED}:
+            skipped_count += 1
+            continue
+
+        match_info = _screen_customer_names(
+            str(row.get("FullName", "")),
+            str(row.get("Aliases", "")),
+        )
+        if not match_info.get("matched"):
+            if review in {SANCTIONS_REVIEW_FUZZY, SANCTIONS_REVIEW_PENDING}:
+                clear_sanctions_match(customer_id, reason="No match on latest sanctions rescreen.")
+            continue
+
+        if match_info.get("match_type") == "exact":
+            apply_confirmed_sanctions_match(customer_id, match_info)
+            exact_count += 1
+        else:
+            apply_fuzzy_sanctions_match(customer_id, match_info)
+            fuzzy_queue.append({"customer_id": customer_id, **match_info})
+            fuzzy_count += 1
+
+    return {
+        "exact": exact_count,
+        "fuzzy": fuzzy_count,
+        "skipped": skipped_count,
+        "fuzzy_queue": fuzzy_queue,
+    }
+
+
+def _sanctions_screen_fingerprint() -> str:
+    from utils.mas_sanctions_sync import _load_consolidated_names
+
+    names = "\n".join(sorted(_load_consolidated_names()))
+    return hashlib.sha256(names.encode("utf-8")).hexdigest()[:16]
+
+
+def ensure_kyc_sanctions_screened() -> dict | None:
+    """
+    Rescreen all enrolled customers when the consolidated sanctions list changes.
+
+    Returns rescreen stats when a new screen runs, otherwise None.
+    """
+    meta = _read_generation_meta()
+    fingerprint = _sanctions_screen_fingerprint()
+    if meta.get("sanctions_screen_fingerprint") == fingerprint:
+        return None
+
+    result = rescreen_all_kyc_customers()
+    meta.update(
+        {
+            "sanctions_screen_fingerprint": fingerprint,
+            "sanctions_screen_at": _utc_now_iso(),
+            "sanctions_screen_exact": result["exact"],
+            "sanctions_screen_fuzzy": result["fuzzy"],
+        }
+    )
+    KYC_META_PATH.parent.mkdir(parents=True, exist_ok=True)
+    KYC_META_PATH.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    return result
+
+
+def force_rescreen_kyc_sanctions() -> dict:
+    """Always rescreen enrolled customers and refresh the stored sanctions fingerprint."""
+    result = rescreen_all_kyc_customers()
+    meta = _read_generation_meta()
+    meta.update(
+        {
+            "sanctions_screen_fingerprint": _sanctions_screen_fingerprint(),
+            "sanctions_screen_at": _utc_now_iso(),
+            "sanctions_screen_exact": result["exact"],
+            "sanctions_screen_fuzzy": result["fuzzy"],
+        }
+    )
+    KYC_META_PATH.parent.mkdir(parents=True, exist_ok=True)
+    KYC_META_PATH.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    return result
 
 
 def enrol_customer(
@@ -865,8 +1096,18 @@ def enrol_customer(
         raise ValueError("Full name is required.")
 
     aliases = str(data.get("Aliases", "")).strip()
+    sanctions_confirmed = bool(data.get("sanctions_confirmed"))
+    sanctions_rejected = bool(data.get("sanctions_rejected"))
     match_info = sanctions_match if sanctions_match is not None else _screen_customer_names(name, aliases)
-    sanctions_review = SANCTIONS_REVIEW_PENDING if match_info.get("matched") else SANCTIONS_REVIEW_NONE
+    if sanctions_rejected or not match_info.get("matched"):
+        match_info = {**match_info, "matched": False}
+        sanctions_review = SANCTIONS_REVIEW_NONE
+    elif sanctions_confirmed or match_info.get("match_type") == "exact":
+        sanctions_review = SANCTIONS_REVIEW_CONFIRMED
+    elif match_info.get("match_type") == "fuzzy":
+        sanctions_review = SANCTIONS_REVIEW_FUZZY
+    else:
+        sanctions_review = SANCTIONS_REVIEW_PENDING
 
     customer_type = str(data.get("customer_type", CUSTOMER_TYPE_INDIVIDUAL)).strip() or CUSTOMER_TYPE_INDIVIDUAL
     row = _empty_kyc_fields()
@@ -880,6 +1121,24 @@ def enrol_customer(
     row["SanctionsReview"] = sanctions_review
     row["LastCDDReviewAt"] = _utc_now_iso()
     row["IsPEP"] = row.get("IsPEP") or "No"
+
+    if match_info.get("matched") and sanctions_review == SANCTIONS_REVIEW_CONFIRMED:
+        row["SanctionsMatchedName"] = str(match_info.get("matched_name", ""))
+        row["SanctionsListKey"] = str(match_info.get("list_key") or "MAS Sanctions")
+        row["SanctionsMatchScore"] = str(int(round(float(match_info.get("confidence", 0) or 0) * 100)))
+        row["SanctionsMatchType"] = str(match_info.get("match_type", "exact"))
+        row["CDDLevel"] = CDD_ENHANCED
+        row["Comments"] = _append_comment(row.get("Comments", ""), _sanctions_comment(match_info, confirmed=True))
+        row["FlaggedReason"] = "Sanctions List Match"
+        row["RiskIndicators"] = _append_indicator(row.get("RiskIndicators", ""), "MAS Sanctions — confirmed list match")
+        if _risk_rank(str(row.get("RiskStatus", RISK_LOW))) < _risk_rank(RISK_HIGH):
+            row["RiskStatus"] = RISK_HIGH
+    elif match_info.get("matched") and sanctions_review == SANCTIONS_REVIEW_FUZZY:
+        row["SanctionsMatchedName"] = str(match_info.get("matched_name", ""))
+        row["SanctionsListKey"] = str(match_info.get("list_key") or "MAS Sanctions")
+        row["SanctionsMatchScore"] = str(int(round(float(match_info.get("confidence", 0) or 0) * 100)))
+        row["SanctionsMatchType"] = "fuzzy"
+        row["Comments"] = _append_comment(row.get("Comments", ""), _sanctions_comment(match_info, confirmed=False))
 
     from utils.fatf_jurisdictions import apply_fatf_to_kyc_row
 
@@ -985,7 +1244,12 @@ def apply_cdd_escalation_from_transactions(scored_df: pd.DataFrame) -> list[dict
         if not hit_tier and not fatf_hit:
             continue
 
-        sanctions_pending = str(row_dict.get("SanctionsReview", "")).strip() == SANCTIONS_REVIEW_PENDING
+        sanctions_pending = str(row_dict.get("SanctionsReview", "")).strip() in {
+            SANCTIONS_REVIEW_PENDING,
+            SANCTIONS_REVIEW_FUZZY,
+            SANCTIONS_REVIEW_CONFIRMED,
+            SANCTIONS_REVIEW_ESCALATED,
+        }
         fatf_category = str(row_dict.get("FATFListCategory", ""))
         txn_tier = hit_tier or "Low"
         new_risk = recommend_risk_status(

@@ -106,7 +106,11 @@ def recommend_cdd_level(
     risk = _normalize(risk_status, RISK_LOW)
     tier = _normalize(top_txn_tier or "", "")
 
-    if sanctions_pending or risk in {RISK_HIGH, RISK_CRITICAL} or tier in {"Critical", "High"}:
+    if (
+        sanctions_pending
+        or risk in {RISK_HIGH, RISK_CRITICAL}
+        or tier in {"Critical", "High"}
+    ):
         target = CDD_ENHANCED
     elif risk == RISK_MEDIUM or tier == "Medium":
         target = CDD_STANDARD

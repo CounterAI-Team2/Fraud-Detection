@@ -19,12 +19,19 @@ from utils.kyc_store import (
     KYC_PAGE_SIZE_DEFAULT,
     RISK_CRITICAL,
     RISK_HIGH,
+    SANCTIONS_ACTIVE_REVIEW_STATUSES,
+    SANCTIONS_REVIEW_CONFIRMED,
+    SANCTIONS_REVIEW_FUZZY,
     SANCTIONS_REVIEW_PENDING,
+    apply_confirmed_sanctions_match,
+    clear_sanctions_match,
     enrol_customer,
     ensure_kyc_database,
     get_kyc_by_id,
     get_kyc_customers,
     paginate_kyc_customers,
+    force_rescreen_kyc_sanctions,
+    ensure_kyc_sanctions_screened,
     search_kyc_customers,
     set_customer_risk_status,
     update_kyc_record,
@@ -204,9 +211,25 @@ def _risk_badge(risk: str) -> str:
     return _badge(risk, styles.get(risk, "background:#2a2a2a;color:#888"))
 
 def _sanctions_badge(status: str) -> str:
-    if status == SANCTIONS_REVIEW_PENDING:
-        return _badge("Pending", "background:rgba(77,166,255,0.15);color:#4da6ff")
+    styles = {
+        SANCTIONS_REVIEW_PENDING: ("Pending", "background:rgba(77,166,255,0.15);color:#4da6ff"),
+        SANCTIONS_REVIEW_FUZZY: ("Fuzzy", "background:rgba(253,216,53,0.15);color:#fdd835"),
+        SANCTIONS_REVIEW_CONFIRMED: ("Confirmed", "background:rgba(244,67,54,0.15);color:#f44336"),
+    }
+    if status in styles:
+        label, style = styles[status]
+        return _badge(label, style)
     return f"<span style='color:#555'>—</span>"
+
+
+def _sanctions_table_label(status: str) -> str:
+    if status == SANCTIONS_REVIEW_PENDING:
+        return "Pending"
+    if status == SANCTIONS_REVIEW_FUZZY:
+        return "Fuzzy"
+    if status == SANCTIONS_REVIEW_CONFIRMED:
+        return "Confirmed"
+    return "—"
 
 def _detail_line(label: str, value: str) -> None:
     display = str(value or "").strip() or "—"
@@ -229,7 +252,7 @@ def _render_kyc_table_row(row: pd.Series) -> None:
     _risk = str(row.get("RiskStatus", "Low"))
     _cdd = str(row.get("CDDLevel", "—")) or "—"
     _sanc = str(row.get("SanctionsReview", ""))
-    _sanc_d = "Pending" if _sanc == SANCTIONS_REVIEW_PENDING else "—"
+    _sanc_d = _sanctions_table_label(_sanc)
 
     _cells = [
         f"{_name}\n{_cid}",
@@ -253,6 +276,8 @@ def _render_kyc_table_row(row: pd.Series) -> None:
 
 
 def _complete_enrolment(pending: dict) -> None:
+    if pending.get("sanctions_match") and not pending.get("sanctions_rejected"):
+        pending["sanctions_confirmed"] = True
     row, match_info = enrol_customer(
         pending,
         sanctions_match=pending.get("sanctions_match"),
@@ -284,8 +309,11 @@ def _complete_enrolment(pending: dict) -> None:
     )
     st.session_state.pop("kyc_pending_enrol", None)
     msg = f"Customer **{row['FullName']}** enrolled (ID: `{row['id']}`)."
-    if match_info.get("matched"):
-        msg += " Sanctions review flagged as **Pending**."
+    if match_info.get("matched") and not pending.get("sanctions_rejected"):
+        if match_info.get("match_type") == "fuzzy":
+            msg += " Fuzzy sanctions match flagged — **Enhanced CDD** applied after confirmation."
+        else:
+            msg += " Sanctions list match **confirmed** — **Enhanced CDD** applied."
     if is_pep:
         msg += " Risk set to **Critical** (PEP) — pending SM approval."
     elif indicators:
@@ -301,23 +329,59 @@ def _enrol_dialog() -> None:
     if _pending and _pending.get("sanctions_match"):
         _match = _pending["sanctions_match"]
         _list_key = _match.get("list_key") or "MAS Targeted Financial Sanctions list"
-        st.warning(
-            f"Potential match on **{_list_key}** "
-            f"(matched: `{_match.get('matched_name', '')}`). "
-            "Additional CDD required before proceeding."
+        _confidence = float(_match.get("confidence", 0) or 0) * 100
+        _is_fuzzy = _match.get("match_type") == "fuzzy"
+
+        if _is_fuzzy:
+            st.warning(
+                f"**Possible sanctions match** on **{_list_key}** "
+                f"({_confidence:.0f}% similarity)."
+            )
+            st.caption("Fuzzy matches require analyst confirmation before sanctions controls are applied.")
+        else:
+            st.error(
+                f"**Exact sanctions list match** on **{_list_key}**."
+            )
+            st.caption("This customer matches a designated name on the sanctions list.")
+
+        st.markdown(
+            f"- **Customer name:** {_pending.get('FullName', '')}  \n"
+            f"- **Matched list name:** `{_match.get('matched_name', '')}`  \n"
+            f"- **Account:** {_pending.get('AccountNo', '')}"
         )
-        st.write(f"Pending: **{_pending.get('FullName', '')}** · Account **{_pending.get('AccountNo', '')}**")
-        _wc1, _wc2 = st.columns(2)
-        if _wc1.button("Register with Pending Review", type="primary", use_container_width=True):
-            _pending["sanctions_warning_acknowledged"] = True
-            try:
-                _complete_enrolment(_pending)
+
+        if _is_fuzzy:
+            _wc1, _wc2, _wc3 = st.columns(3)
+            if _wc1.button("Confirm match & enrol", type="primary", use_container_width=True):
+                _pending["sanctions_confirmed"] = True
+                try:
+                    _complete_enrolment(_pending)
+                    st.rerun()
+                except ValueError as exc:
+                    st.error(str(exc))
+            if _wc2.button("Enrol — not a match", use_container_width=True):
+                _pending.pop("sanctions_match", None)
+                _pending["sanctions_rejected"] = True
+                try:
+                    _complete_enrolment(_pending)
+                    st.rerun()
+                except ValueError as exc:
+                    st.error(str(exc))
+            if _wc3.button("Cancel", use_container_width=True):
+                st.session_state.pop("kyc_pending_enrol", None)
                 st.rerun()
-            except ValueError as exc:
-                st.error(str(exc))
-        if _wc2.button("Cancel", use_container_width=True):
-            st.session_state.pop("kyc_pending_enrol", None)
-            st.rerun()
+        else:
+            _wc1, _wc2 = st.columns(2)
+            if _wc1.button("Confirm match & enrol", type="primary", use_container_width=True):
+                _pending["sanctions_confirmed"] = True
+                try:
+                    _complete_enrolment(_pending)
+                    st.rerun()
+                except ValueError as exc:
+                    st.error(str(exc))
+            if _wc2.button("Cancel", use_container_width=True):
+                st.session_state.pop("kyc_pending_enrol", None)
+                st.rerun()
         return
 
     _ctype = st.radio(
@@ -509,8 +573,33 @@ def _customer_detail_dialog(customer_id: str) -> None:
         st.caption(f"Customer ID `{customer_id}` · {_ctype} · Account `{row.get('AccountNo', '—')}`")
     with _hdr_r:
         st.markdown(_risk_badge(_risk), unsafe_allow_html=True)
-        if _sanc == SANCTIONS_REVIEW_PENDING:
+        if _sanc in {SANCTIONS_REVIEW_PENDING, SANCTIONS_REVIEW_FUZZY, SANCTIONS_REVIEW_CONFIRMED}:
             st.markdown(_sanctions_badge(_sanc), unsafe_allow_html=True)
+
+    if _sanc in {SANCTIONS_REVIEW_FUZZY, SANCTIONS_REVIEW_CONFIRMED, SANCTIONS_REVIEW_PENDING}:
+        with st.container(border=True):
+            st.markdown("**Sanctions screening**")
+            _detail_line("Review status", _sanc)
+            _detail_line("Matched list name", row.get("SanctionsMatchedName", ""))
+            _detail_line("List", row.get("SanctionsListKey", ""))
+            _detail_line("Match score", f"{row.get('SanctionsMatchScore', '')}%")
+            if _sanc == SANCTIONS_REVIEW_FUZZY:
+                _fc1, _fc2 = st.columns(2)
+                if _fc1.button("Confirm sanctions match", key=f"sanc_confirm_{customer_id}", type="primary"):
+                    apply_confirmed_sanctions_match(
+                        customer_id,
+                        {
+                            "matched_name": row.get("SanctionsMatchedName", ""),
+                            "list_key": row.get("SanctionsListKey", ""),
+                            "confidence": float(row.get("SanctionsMatchScore", 0) or 0) / 100,
+                            "match_type": "fuzzy",
+                        },
+                        actor_id=actor_id,
+                    )
+                    st.rerun()
+                if _fc2.button("Clear — not a match", key=f"sanc_clear_{customer_id}"):
+                    clear_sanctions_match(customer_id, actor_id=actor_id)
+                    st.rerun()
 
     _t1, _t2 = st.tabs(["KYC file", "Risk management"])
 
@@ -637,6 +726,69 @@ def _customer_detail_dialog(customer_id: str) -> None:
         st.rerun()
 
 
+@st.dialog("Sanctions Match — Analyst Review", width="large")
+def _fuzzy_sanctions_review_dialog() -> None:
+    queue = st.session_state.get("kyc_fuzzy_sanctions_queue") or []
+    if not queue:
+        return
+
+    item = queue[0]
+    customer_id = str(item.get("customer_id", ""))
+    row = get_kyc_by_id(customer_id)
+    if not row:
+        st.session_state["kyc_fuzzy_sanctions_queue"] = queue[1:]
+        st.rerun()
+        return
+
+    _confidence = float(item.get("confidence", 0) or 0) * 100
+    st.warning(
+        f"Possible sanctions match for **{row.get('FullName', '—')}** "
+        f"({_confidence:.0f}% similarity)."
+    )
+    st.markdown(
+        f"- **Customer ID:** `{customer_id}`  \n"
+        f"- **Account:** `{row.get('AccountNo', '—')}`  \n"
+        f"- **Matched list name:** `{item.get('matched_name', '')}`  \n"
+        f"- **List:** {item.get('list_key') or 'MAS Sanctions'}"
+    )
+    st.caption(f"{len(queue)} customer(s) awaiting sanctions confirmation.")
+
+    _c1, _c2, _c3 = st.columns(3)
+    if _c1.button("Confirm sanctions match", type="primary", use_container_width=True, key="fuzzy_confirm"):
+        apply_confirmed_sanctions_match(customer_id, item, actor_id=actor_id)
+        log_action(
+            action="sanctions_match_confirmed",
+            details=f"customer_id={customer_id}; matched={item.get('matched_name', '')}",
+            analyst_id=actor_id,
+            module="kyc_screening",
+            event_type="sanctions_match_confirmed",
+            entity_type="customer",
+            entity_id=customer_id,
+            actor_role=actor_role,
+            payload=item,
+        )
+        st.session_state["kyc_fuzzy_sanctions_queue"] = queue[1:]
+        st.rerun()
+    if _c2.button("Not a match — clear flag", use_container_width=True, key="fuzzy_clear"):
+        clear_sanctions_match(customer_id, actor_id=actor_id)
+        log_action(
+            action="sanctions_match_cleared",
+            details=f"customer_id={customer_id}; cleared fuzzy hit",
+            analyst_id=actor_id,
+            module="kyc_screening",
+            event_type="sanctions_match_cleared",
+            entity_type="customer",
+            entity_id=customer_id,
+            actor_role=actor_role,
+            payload=item,
+        )
+        st.session_state["kyc_fuzzy_sanctions_queue"] = queue[1:]
+        st.rerun()
+    if _c3.button("Review later", use_container_width=True, key="fuzzy_later"):
+        st.session_state["kyc_fuzzy_sanctions_queue"] = queue[1:] + [queue[0]]
+        st.rerun()
+
+
 # ── Sanctions Banner ──────────────────────────────────────────────────────────
 _sync = st.session_state.get("mas_sync_result") or get_last_sync() or {}
 _sync_status = _sync.get("status", "unknown")
@@ -686,6 +838,43 @@ _tab_registry, _tab_sanctions = st.tabs(
 with _tab_registry:
     customers = get_kyc_customers()
 
+    if not st.session_state.get("kyc_bulk_screen_done"):
+        with st.spinner("Screening enrolled customers against sanctions lists…"):
+            _rescreen = ensure_kyc_sanctions_screened()
+            st.session_state["kyc_bulk_screen_done"] = True
+            if _rescreen:
+                st.session_state["kyc_rescreen_summary"] = _rescreen
+                if _rescreen.get("fuzzy_queue"):
+                    st.session_state["kyc_fuzzy_sanctions_queue"] = _rescreen["fuzzy_queue"]
+        customers = get_kyc_customers()
+
+    _rescreen_summary = st.session_state.pop("kyc_rescreen_summary", None)
+    if _rescreen_summary:
+        _parts = []
+        if _rescreen_summary.get("exact"):
+            _parts.append(f"**{_rescreen_summary['exact']:,}** exact match(es) confirmed with Enhanced CDD")
+        if _rescreen_summary.get("fuzzy"):
+            _parts.append(f"**{_rescreen_summary['fuzzy']:,}** fuzzy match(es) need analyst review")
+        if _parts:
+            st.info("Sanctions rescreen complete: " + " · ".join(_parts) + ".")
+
+    _fuzzy_queue = st.session_state.get("kyc_fuzzy_sanctions_queue") or []
+    if not _fuzzy_queue:
+        _db_fuzzy = customers[
+            customers["SanctionsReview"].astype(str) == SANCTIONS_REVIEW_FUZZY
+        ]
+        if not _db_fuzzy.empty:
+            st.session_state["kyc_fuzzy_sanctions_queue"] = [
+                {
+                    "customer_id": str(row["id"]),
+                    "matched_name": str(row.get("SanctionsMatchedName", "")),
+                    "list_key": str(row.get("SanctionsListKey", "")),
+                    "confidence": float(row.get("SanctionsMatchScore", 0) or 0) / 100,
+                    "match_type": "fuzzy",
+                }
+                for _, row in _db_fuzzy.iterrows()
+            ]
+
     # KPI row
     _m1, _m2, _m3, _m4, _m5, _m6 = st.columns(6)
     _kpi_data = [
@@ -694,7 +883,7 @@ with _tab_registry:
         (_m3, "Medium",            int(customers["RiskStatus"].astype(str).str.lower().eq("medium").sum()),                          "#fdd835"),
         (_m4, "High",              int(customers["RiskStatus"].astype(str).str.lower().eq("high").sum()),                            "#fb8c00"),
         (_m5, "Critical",          int(customers["RiskStatus"].astype(str).str.lower().eq("critical").sum()),                        "#f44336"),
-        (_m6, "Sanc. Pending", int(customers["SanctionsReview"].astype(str).eq(SANCTIONS_REVIEW_PENDING).sum()), "#888"),
+        (_m6, "Sanc. Flags", int(customers["SanctionsReview"].astype(str).isin(SANCTIONS_ACTIVE_REVIEW_STATUSES).sum()), "#888"),
     ]
     for _mcol, _mlabel, _mval, _mcolor in _kpi_data:
         with _mcol:
@@ -734,7 +923,7 @@ with _tab_registry:
     if "kyc_page_size_input" not in st.session_state:
         st.session_state["kyc_page_size_input"] = int(_applied["page_size"])
 
-    _toolbar_l, _toolbar_r = st.columns([2, 1])
+    _toolbar_l, _toolbar_m, _toolbar_r = st.columns([2, 1, 1])
     with _toolbar_l:
         st.text_input(
             "Search",
@@ -742,6 +931,14 @@ with _tab_registry:
             label_visibility="collapsed",
             key="kyc_search_input",
         )
+    with _toolbar_m:
+        if st.button("Rescreen sanctions", use_container_width=True):
+            with st.spinner("Rescreening all customers…"):
+                _manual = force_rescreen_kyc_sanctions()
+                st.session_state["kyc_rescreen_summary"] = _manual
+                if _manual.get("fuzzy_queue"):
+                    st.session_state["kyc_fuzzy_sanctions_queue"] = _manual["fuzzy_queue"]
+            st.rerun()
     with _toolbar_r:
         if st.button("+ Enrol new customer", type="primary", use_container_width=True):
             st.session_state.pop("kyc_pending_enrol", None)
@@ -885,6 +1082,9 @@ with _tab_registry:
 
     if st.session_state.get("kyc_view_customer_id"):
         _customer_detail_dialog(st.session_state["kyc_view_customer_id"])
+
+    if st.session_state.get("kyc_fuzzy_sanctions_queue"):
+        _fuzzy_sanctions_review_dialog()
 
 
 # ══════════════════════════════════════════════════════════════════════════════

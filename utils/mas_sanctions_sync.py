@@ -467,15 +467,15 @@ def _existing_name_count() -> int:
 
 @lru_cache(maxsize=1)
 def _load_consolidated_names() -> frozenset[str]:
+    names: set[str] = set()
     if CONSOLIDATED_NAMES_PATH.exists():
         text = CONSOLIDATED_NAMES_PATH.read_text(encoding="utf-8")
-        names = {_normalize_name(line) for line in text.splitlines() if line.strip()}
-        if names:
-            return frozenset(names)
-    # Fallback to the bundled Iran list so screening still works offline.
+        names.update(_normalize_name(line) for line in text.splitlines() if line.strip())
+    # Always union the bundled Iran list so screening works when auto-sync fails.
     from utils.kyc_store import load_iran_sanctions_names
 
-    return load_iran_sanctions_names()
+    names.update(load_iran_sanctions_names())
+    return frozenset(names)
 
 
 def _clear_screening_cache() -> None:
@@ -491,23 +491,12 @@ def _list_key_for_name(name: str) -> str | None:
 
 
 def screen_name(full_name: str) -> dict:
-    """Return ``{matched, matched_name, list_key}`` for a candidate name."""
-    normalized = _normalize_name(full_name)
-    if not normalized:
-        return {"matched": False, "matched_name": "", "list_key": None}
+    """Return match metadata for a candidate name (exact or fuzzy)."""
+    from utils.name_matching import find_best_name_match
 
     sanctions = _load_consolidated_names()
-    if normalized in sanctions:
-        return {
-            "matched": True,
-            "matched_name": normalized,
-            "list_key": _list_key_for_name(normalized) or "MAS Sanctions",
-        }
-    for entry in sanctions:
-        if entry in normalized or normalized in entry:
-            return {
-                "matched": True,
-                "matched_name": entry,
-                "list_key": _list_key_for_name(entry) or "MAS Sanctions",
-            }
-    return {"matched": False, "matched_name": "", "list_key": None}
+    return find_best_name_match(
+        full_name,
+        sanctions,
+        list_key_resolver=lambda name: _list_key_for_name(name) or "MAS Sanctions",
+    )
