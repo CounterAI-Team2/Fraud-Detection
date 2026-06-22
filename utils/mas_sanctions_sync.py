@@ -1081,10 +1081,16 @@ def sync_mas_sanctions(force: bool = False) -> SyncResult:
 
 def list_catalog_entries() -> list[dict]:
     """Return a UI-friendly view of the current catalog."""
-    reconcile_catalog_with_local_files()
+    try:
+        reconcile_catalog_with_local_files()
+    except Exception:
+        pass
+
     catalog = _read_catalog().get("lists", {})
     rows: list[dict] = []
     for key, meta in catalog.items():
+        if not isinstance(meta, dict):
+            meta = {}
         status = catalog_entry_status(meta)
         rows.append(
             {

@@ -38,6 +38,7 @@ from utils.kyc_store import (
 )
 from utils.mas_sanctions_sync import (
     MAS_INDEX_URL,
+    catalog_entry_status,
     get_last_sync,
     import_uploaded_list,
     list_catalog_entries,
@@ -1093,12 +1094,20 @@ with _tab_registry:
         _fuzzy_sanctions_review_dialog()
 
 
+def _catalog_row_status(entry: dict) -> str:
+    return str(
+        entry.get("status")
+        or catalog_entry_status(entry)
+        or ("Needs upload" if entry.get("needs_manual_upload") else "Synced")
+    )
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 2 — Sanctions Lists
 # ══════════════════════════════════════════════════════════════════════════════
 with _tab_sanctions:
     _catalog      = list_catalog_entries()
-    _needs_upload = [e for e in _catalog if e["status"] == "Needs upload"]
+    _needs_upload = [e for e in _catalog if _catalog_row_status(e) == "Needs upload"]
 
     _sc_left, _sc_right = st.columns(2, gap="medium")
 
@@ -1118,7 +1127,7 @@ with _tab_sanctions:
                         "Category":     e["category"],
                         "Names":        e["name_count"],
                         "Last Updated": e["last_updated"],
-                        "Status":       e["status"],
+                        "Status":       _catalog_row_status(e),
                     }
                     for e in _catalog
                 ]
