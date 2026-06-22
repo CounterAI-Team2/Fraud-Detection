@@ -392,6 +392,9 @@ def generate_kyc_rows(
         else:
             rows.append(_build_individual_row(account_no, customer_id, rng))
 
+    from utils.kyc_store import apply_demo_sanctions_test_rows
+
+    apply_demo_sanctions_test_rows(rows)
     return rows
 
 

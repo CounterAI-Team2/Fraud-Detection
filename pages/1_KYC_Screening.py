@@ -1112,7 +1112,15 @@ with _tab_sanctions:
                         "Category":     e["category"],
                         "Names":        e["name_count"],
                         "Last Updated": e["last_updated"],
-                        "Status":       "Needs upload" if e["needs_manual_upload"] else "Synced",
+                        "Status": (
+                            "HTML downloaded"
+                            if e.get("html_path")
+                            else "Landing cached"
+                            if e.get("landing_fetched_at") and e.get("needs_html_download")
+                            else "Needs upload"
+                            if e["needs_manual_upload"]
+                            else "Synced"
+                        ),
                     }
                     for e in _catalog
                 ]
@@ -1124,12 +1132,14 @@ with _tab_sanctions:
         with st.container(border=True):
             st.markdown("**Manual Upload**")
             st.caption(
-                "Download the HTML page from MAS or UN directly and drop it here. "
-                "Names are parsed and merged automatically."
+                "Upload HTML exports from MAS/UN, or plain text / CSV name lists (one name per line). "
+                "Names are parsed, saved, merged into the consolidated list, and customers are rescreened."
             )
             _uploaded_html = st.file_uploader(
-                "HTML file(s)", type=["html", "htm"],
-                accept_multiple_files=True, key="mas_manual_upload",
+                "Name list file(s)",
+                type=["html", "htm", "txt", "csv", "tsv"],
+                accept_multiple_files=True,
+                key="mas_manual_upload",
             )
             _existing_keys  = [e["key"] for e in _catalog]
             _target_options = ["Auto from filename", "New custom list", *_existing_keys]
@@ -1145,6 +1155,9 @@ with _tab_sanctions:
             if _uploaded_html and st.button("Import Files", type="primary", use_container_width=True):
                 _aid4, _arole4 = get_current_analyst()
                 _results, _errors = [], []
+                _rescreen_exact = 0
+                _rescreen_fuzzy = 0
+                _fuzzy_queue: list[dict] = []
                 for _upl in _uploaded_html:
                     try:
                         _raw_html = _upl.read().decode("utf-8", errors="replace")
@@ -1161,8 +1174,19 @@ with _tab_sanctions:
                         _kh = _target
                         _me = next((e for e in _catalog if e["key"] == _target), {})
                         _lh, _ch, _luh = _me.get("label", ""), _me.get("category", ""), _me.get("last_updated", "")
-                    _result = import_uploaded_list(html=_raw_html, key=_kh, label=_lh, category=_ch, last_updated=_luh)
+                    _result = import_uploaded_list(
+                        html=_raw_html,
+                        key=_kh,
+                        label=_lh,
+                        category=_ch,
+                        last_updated=_luh,
+                        filename=_upl.name,
+                    )
                     _results.append({"filename": _upl.name, **_result})
+                    _rescreen = _result.get("rescreen") or {}
+                    _rescreen_exact += int(_rescreen.get("exact", 0))
+                    _rescreen_fuzzy += int(_rescreen.get("fuzzy", 0))
+                    _fuzzy_queue.extend(_rescreen.get("fuzzy_queue", []))
                     log_action(
                         action="mas_list_manual_upload",
                         details=f"key={_result['key']}; file={_upl.name}; name_count={_result['name_count']}",
@@ -1174,6 +1198,8 @@ with _tab_sanctions:
                             "name_count": _result["name_count"],
                             "total_names": _result["total_names"],
                             "label": _lh, "category": _ch,
+                            "rescreen_exact": _rescreen.get("exact", 0),
+                            "rescreen_fuzzy": _rescreen.get("fuzzy", 0),
                         },
                     )
                 for _r in _results:
@@ -1184,4 +1210,17 @@ with _tab_sanctions:
                 for _err in _errors:
                     st.error(_err)
                 if _results:
+                    if _rescreen_exact or _rescreen_fuzzy:
+                        _parts = []
+                        if _rescreen_exact:
+                            _parts.append(f"**{_rescreen_exact:,}** exact match(es) confirmed")
+                        if _rescreen_fuzzy:
+                            _parts.append(f"**{_rescreen_fuzzy:,}** fuzzy match(es) queued for review")
+                        st.session_state["kyc_rescreen_summary"] = {
+                            "exact": _rescreen_exact,
+                            "fuzzy": _rescreen_fuzzy,
+                        }
+                        if _fuzzy_queue:
+                            st.session_state["kyc_fuzzy_sanctions_queue"] = _fuzzy_queue
+                        st.info("Sanctions rescreen after upload: " + " · ".join(_parts) + ".")
                     st.rerun()

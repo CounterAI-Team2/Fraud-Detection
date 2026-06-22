@@ -127,6 +127,34 @@ SANCTIONS_ACTIVE_REVIEW_STATUSES = frozenset({
     SANCTIONS_REVIEW_ESCALATED,
 })
 
+# First rows in the generated KYC database — used to demo exact/fuzzy sanctions hits.
+DEMO_SANCTIONS_TEST_PROFILES: tuple[dict[str, str], ...] = (
+    {
+        "FullName": "Aiman Muhammed Rabi Al-Zawahiri",
+        "Nationality": "Egyptian",
+        "Occupation": "Demo — sanctions exact match",
+        "Comments": "Demo account seeded for sanctions exact-match testing.",
+    },
+    {
+        "FullName": "Agus Dwikarna",
+        "Nationality": "Indonesian",
+        "Occupation": "Demo — sanctions exact match",
+        "Comments": "Demo account seeded for sanctions exact-match testing.",
+    },
+    {
+        "FullName": "Ahmed Khalafan Ghailani",
+        "Nationality": "Tanzanian",
+        "Occupation": "Demo — sanctions fuzzy match",
+        "Comments": "Demo account seeded for sanctions fuzzy-match testing.",
+    },
+    {
+        "FullName": "Mohammed Reza Zahedi",
+        "Nationality": "Iranian",
+        "Occupation": "Demo — sanctions fuzzy match",
+        "Comments": "Demo account seeded for sanctions fuzzy-match testing.",
+    },
+)
+
 _DEMO_ENRICHMENT: dict[str, dict[str, str]] = {}
 
 
@@ -455,6 +483,62 @@ MOCK_KYC_ROWS: list[dict[str, str]] = [
 ]
 
 
+def apply_demo_sanctions_test_rows(rows: list[dict[str, str]]) -> None:
+    """Overwrite the first demo rows with known sanctions test names."""
+    sanctions_fields = (
+        "SanctionsReview",
+        "SanctionsMatchedName",
+        "SanctionsListKey",
+        "SanctionsMatchScore",
+        "SanctionsMatchType",
+    )
+    for index, profile in enumerate(DEMO_SANCTIONS_TEST_PROFILES):
+        if index >= len(rows):
+            break
+        rows[index].update(profile)
+        for field in sanctions_fields:
+            rows[index][field] = ""
+
+
+def ensure_demo_sanctions_test_customers() -> bool:
+    """
+    Patch the first KYC rows with demo sanctions test names (idempotent).
+
+    Clears the stored sanctions fingerprint so the next screen run picks up matches.
+    """
+    meta = _read_generation_meta()
+    if meta.get("demo_sanctions_seeded_v1"):
+        return False
+
+    if not KYC_PATH.exists():
+        return False
+
+    customers = pd.read_csv(KYC_PATH, dtype=str)
+    customers = _migrate_dataframe(customers)
+    if len(customers) < len(DEMO_SANCTIONS_TEST_PROFILES):
+        return False
+
+    sanctions_fields = (
+        "SanctionsReview",
+        "SanctionsMatchedName",
+        "SanctionsListKey",
+        "SanctionsMatchScore",
+        "SanctionsMatchType",
+    )
+    for index, profile in enumerate(DEMO_SANCTIONS_TEST_PROFILES):
+        for key, value in profile.items():
+            customers.at[customers.index[index], key] = value
+        for field in sanctions_fields:
+            customers.at[customers.index[index], field] = ""
+
+    save_kyc_customers(customers)
+    meta["demo_sanctions_seeded_v1"] = True
+    meta.pop("sanctions_screen_fingerprint", None)
+    KYC_META_PATH.parent.mkdir(parents=True, exist_ok=True)
+    KYC_META_PATH.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    return True
+
+
 def _ensure_parent() -> None:
     KYC_PATH.parent.mkdir(parents=True, exist_ok=True)
 
@@ -681,10 +765,12 @@ def ensure_kyc_database() -> None:
         if not df.empty and not _needs_bulk_regeneration(df):
             if any(col not in df.columns for col in KYC_COLUMNS):
                 save_kyc_customers(_migrate_dataframe(df))
+            ensure_demo_sanctions_test_customers()
             return
 
     try:
         regenerate_kyc_database()
+        ensure_demo_sanctions_test_customers()
         return
     except (FileNotFoundError, ValueError):
         pass
@@ -694,10 +780,12 @@ def ensure_kyc_database() -> None:
         if not df.empty:
             migrated = _migrate_dataframe(df)
             save_kyc_customers(migrated)
+            ensure_demo_sanctions_test_customers()
             return
 
     seed = pd.DataFrame(MOCK_KYC_ROWS, columns=KYC_COLUMNS)
     seed.to_csv(KYC_PATH, index=False)
+    ensure_demo_sanctions_test_customers()
 
 
 def _apply_fatf_screening_to_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
