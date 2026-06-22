@@ -110,7 +110,6 @@ RISK_CRITICAL = "Critical"
 CUSTOMER_RISK_STATUSES = [RISK_LOW, RISK_MEDIUM, RISK_HIGH, RISK_CRITICAL]
 
 CDD_SIMPLIFIED = "Simplified"
-CDD_STANDARD = "Standard"
 CDD_ENHANCED = "Enhanced"
 
 SANCTIONS_REVIEW_NONE = ""
@@ -232,7 +231,7 @@ def _seed_corporate(
     purpose: str = "",
     comments: str = "",
     risk: str = RISK_LOW,
-    cdd: str = CDD_STANDARD,
+    cdd: str = CDD_SIMPLIFIED,
 ) -> dict[str, str]:
     row = _empty_kyc_fields()
     row.update(
@@ -280,7 +279,7 @@ MOCK_KYC_ROWS: list[dict[str, str]] = [
         source_of_income="Employment (TechCorp Pte Ltd)",
         purpose="Personal savings and daily banking",
         comments="Priority retail; verified passport 2024",
-        risk=RISK_MEDIUM, cdd=CDD_STANDARD,
+        risk=RISK_MEDIUM, cdd=CDD_SIMPLIFIED,
     ),
     _seed_individual(
         "1847293056", "James Whitmore", "685933721",
@@ -318,7 +317,7 @@ MOCK_KYC_ROWS: list[dict[str, str]] = [
         source_of_income="Contract remittances",
         purpose="Personal remittances and savings",
         comments="Tech contractor remittances",
-        risk=RISK_MEDIUM, cdd=CDD_STANDARD,
+        risk=RISK_MEDIUM, cdd=CDD_SIMPLIFIED,
     ),
     _seed_individual(
         "7721049583", "Sophie Laurent", "3797478122",
@@ -355,7 +354,7 @@ MOCK_KYC_ROWS: list[dict[str, str]] = [
         source_of_income="Hospital salary",
         purpose="Family support transfers",
         comments="Family support transfers",
-        risk=RISK_MEDIUM, cdd=CDD_STANDARD,
+        risk=RISK_MEDIUM, cdd=CDD_SIMPLIFIED,
     ),
     _seed_individual(
         "2048571936", "Daniel Kowalski", "73806488",
@@ -464,7 +463,7 @@ MOCK_KYC_ROWS: list[dict[str, str]] = [
         documents="ACRA BizFile (2024); Certificate of Incorporation; Board resolution — account opening",
         purpose="Trade finance and supplier payments",
         comments="Regional freight forwarder",
-        cdd=CDD_STANDARD,
+        cdd=CDD_SIMPLIFIED,
     ),
     _seed_corporate(
         "9922334455", "Nordic Green Energy AS", "NO-CORP-5502",
@@ -478,7 +477,7 @@ MOCK_KYC_ROWS: list[dict[str, str]] = [
         purpose="Renewable project treasury and FX hedging",
         comments="Energy sector corporate client",
         risk=RISK_MEDIUM,
-        cdd=CDD_STANDARD,
+        cdd=CDD_SIMPLIFIED,
     ),
 ]
 
@@ -1225,7 +1224,7 @@ def enrol_customer(
     row["FullName"] = name
     row["AccountNo"] = account_no_val
     row["RiskStatus"] = row.get("RiskStatus") or RISK_LOW
-    row["CDDLevel"] = row.get("CDDLevel") or (CDD_STANDARD if customer_type == CUSTOMER_TYPE_CORPORATE else CDD_SIMPLIFIED)
+    row["CDDLevel"] = row.get("CDDLevel") or CDD_SIMPLIFIED
     row["SanctionsReview"] = sanctions_review
     row["LastCDDReviewAt"] = _utc_now_iso()
     row["IsPEP"] = row.get("IsPEP") or "No"
@@ -1408,7 +1407,7 @@ def apply_cdd_escalation_from_transactions(scored_df: pd.DataFrame) -> list[dict
 _RISK_RANK: dict[str, int] = {RISK_LOW: 0, RISK_MEDIUM: 1, RISK_HIGH: 2, RISK_CRITICAL: 3}
 _RISK_TO_CDD: dict[str, str] = {
     RISK_LOW: CDD_SIMPLIFIED,
-    RISK_MEDIUM: CDD_STANDARD,
+    RISK_MEDIUM: CDD_SIMPLIFIED,
     RISK_HIGH: CDD_ENHANCED,
     RISK_CRITICAL: CDD_ENHANCED,
 }
@@ -1443,8 +1442,8 @@ def set_customer_risk_status(
     old_status = str(row["RiskStatus"])
     new_cdd = _RISK_TO_CDD.get(new_status, CDD_SIMPLIFIED)
 
-    old_cdd_rank = {CDD_SIMPLIFIED: 0, CDD_STANDARD: 1, CDD_ENHANCED: 2}.get(str(row["CDDLevel"]), 0)
-    new_cdd_rank = {CDD_SIMPLIFIED: 0, CDD_STANDARD: 1, CDD_ENHANCED: 2}.get(new_cdd, 0)
+    old_cdd_rank = {CDD_SIMPLIFIED: 0, CDD_ENHANCED: 1}.get(str(row["CDDLevel"]), 0)
+    new_cdd_rank = {CDD_SIMPLIFIED: 0, CDD_ENHANCED: 1}.get(new_cdd, 0)
     applied_cdd = new_cdd if new_cdd_rank >= old_cdd_rank else str(row["CDDLevel"])
 
     updates: dict[str, str] = {

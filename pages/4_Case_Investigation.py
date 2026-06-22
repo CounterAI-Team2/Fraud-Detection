@@ -24,7 +24,6 @@ from utils.constants import (
     CASE_STATUS_RESOLVED,
     CDD_LEVEL_ENHANCED,
     CDD_LEVEL_SIMPLIFIED,
-    CDD_LEVEL_STANDARD,
     CDD_LEVELS,
     RISK_TIER_COLORS,
 )
@@ -87,7 +86,6 @@ case_status = existing_case.get("status", CASE_STATUS_OPEN)
 def _risk_from_cdd(cdd_level: str) -> str:
     return {
         CDD_LEVEL_SIMPLIFIED: RISK_LOW,
-        CDD_LEVEL_STANDARD: RISK_MEDIUM,
         CDD_LEVEL_ENHANCED: RISK_HIGH,
     }.get(str(cdd_level), RISK_LOW)
 
@@ -337,8 +335,8 @@ with st.container(border=True):
     else:
         st.caption(f"No KYC record for `{selected_txn['Sender_account']}`. Enrol on KYC page to enable CDD.")
 
-    default_cdd = existing_case.get("cdd_level") or recommended_cdd or CDD_LEVEL_STANDARD
-    default_idx = CDD_LEVELS.index(default_cdd) if default_cdd in CDD_LEVELS else 1
+    default_cdd = existing_case.get("cdd_level") or recommended_cdd or CDD_LEVEL_SIMPLIFIED
+    default_idx = CDD_LEVELS.index(default_cdd) if default_cdd in CDD_LEVELS else 0
     cdd_level   = st.radio("CDD Level", CDD_LEVELS, index=default_idx, horizontal=True)
     if kyc_row:
         current_risk = str(kyc_row.get("RiskStatus", RISK_LOW) or RISK_LOW)
@@ -426,7 +424,7 @@ with st.container(border=True):
                 "status": status, "cdd_level": cdd_level,
                 "notes": notes, "resolution": outcome_reason,
                 "str_required": cdd_level == CDD_LEVEL_ENHANCED,
-                "kyc_risk_tier": "High" if cdd_level == CDD_LEVEL_ENHANCED else ("Medium" if cdd_level == CDD_LEVEL_STANDARD else "Low"),
+                "kyc_risk_tier": "High" if cdd_level == CDD_LEVEL_ENHANCED else "Low",
             },
         )
         attachment_list = [a.strip() for a in attachment_names.split(",") if a.strip()]
@@ -471,7 +469,7 @@ with st.container(border=True):
                 entity_id=updated_case["case_id"], actor_role=actor_role,
                 payload={"cdd_level": cdd_level, "reason": outcome_reason},
             )
-            if cdd_level in {CDD_LEVEL_STANDARD, CDD_LEVEL_ENHANCED}:
+            if cdd_level == CDD_LEVEL_ENHANCED:
                 escalate_customer_risk(
                     account_no=str(selected_txn["Sender_account"]),
                     new_risk_status=_risk_from_cdd(cdd_level),

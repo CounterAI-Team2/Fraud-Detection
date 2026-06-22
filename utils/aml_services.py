@@ -10,7 +10,7 @@ from utils.constants import (
     CASE_CLOSED_STATUSES,
     CASE_OPEN_STATUSES,
     CASE_STATUS_OPEN,
-    CDD_LEVEL_STANDARD,
+    CDD_LEVEL_SIMPLIFIED,
     HIGH_VALUE_THRESHOLD,
 )
 from utils.data_store import (
@@ -167,7 +167,7 @@ def ensure_case_for_transaction(txn: pd.Series, owner: str) -> dict[str, Any]:
         "alert_tier": str(txn["risk_tier"]),
         "status": CASE_STATUS_OPEN,
         "owner": owner,
-        "cdd_level": CDD_LEVEL_STANDARD,
+        "cdd_level": CDD_LEVEL_SIMPLIFIED,
         "kyc_risk_tier": str(txn["risk_tier"]),
         "str_required": False,
         "opened_at": utc_now_iso(),

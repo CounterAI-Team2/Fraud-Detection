@@ -10,7 +10,6 @@ import pandas as pd
 from utils.kyc_store import (
     CDD_ENHANCED,
     CDD_SIMPLIFIED,
-    CDD_STANDARD,
     CUSTOMER_TYPE_CORPORATE,
     CUSTOMER_TYPE_INDIVIDUAL,
     KYC_COLUMNS,
@@ -258,7 +257,7 @@ def _risk_profile(rng: random.Random) -> tuple[str, str]:
     if roll < 0.62:
         return RISK_LOW, CDD_SIMPLIFIED
     if roll < 0.85:
-        return RISK_MEDIUM, CDD_STANDARD
+        return RISK_MEDIUM, CDD_SIMPLIFIED
     if roll < 0.97:
         return RISK_HIGH, CDD_ENHANCED
     return RISK_CRITICAL, CDD_ENHANCED
@@ -324,8 +323,8 @@ def _build_corporate_row(account_no: str, customer_id: str, rng: random.Random) 
     risk, cdd = _risk_profile(rng)
     reg = f"{rng.randint(2010, 2023)}{rng.randint(100000, 999999)}"
     slug = re.sub(r"[^a-z0-9]+", "", name.lower())[:18]
-    cdd_rank = {CDD_SIMPLIFIED: 0, CDD_STANDARD: 1, CDD_ENHANCED: 2}
-    applied_cdd = max(cdd, CDD_STANDARD, key=lambda value: cdd_rank[value])
+    # Standard tier removed: no corporate CDD floor above Simplified.
+    applied_cdd = cdd
     row = {
         "id": customer_id,
         "customer_type": CUSTOMER_TYPE_CORPORATE,

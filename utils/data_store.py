@@ -385,7 +385,7 @@ def build_customer_profiles(scored_df: pd.DataFrame) -> pd.DataFrame:
     grouped["customer_type"] = "Individual"
     grouped["kyc_status"] = "Pending Review"
     grouped["kyc_risk_tier"] = grouped.apply(_risk_tier, axis=1)
-    grouped["cdd_level"] = grouped["kyc_risk_tier"].map({"High": "Enhanced", "Medium": "Standard"}).fillna("Simplified")
+    grouped["cdd_level"] = grouped["kyc_risk_tier"].map({"High": "Enhanced"}).fillna("Simplified")
     grouped["sanctions_flag"] = False
     grouped["sanctions_reason"] = ""
     grouped["sanctions_match_source"] = ""

@@ -20,7 +20,6 @@ from utils.fatf_jurisdictions import (
 from utils.kyc_store import (
     CDD_ENHANCED,
     CDD_SIMPLIFIED,
-    CDD_STANDARD,
     RISK_CRITICAL,
     RISK_HIGH,
     RISK_LOW,
@@ -33,7 +32,7 @@ _RISK_RANK = {RISK_LOW: 0, RISK_MEDIUM: 1, RISK_HIGH: 2, RISK_CRITICAL: 3}
 # Transaction risk_tier rank (ML model output — separate concept from customer RiskStatus).
 _TIER_RANK = {"Low": 0, "Medium": 1, "High": 2, "Critical": 3}
 
-_CDD_RANK = {CDD_SIMPLIFIED: 0, CDD_STANDARD: 1, CDD_ENHANCED: 2}
+_CDD_RANK = {CDD_SIMPLIFIED: 0, CDD_ENHANCED: 1}
 
 
 def _normalize(value: str | None, default: str) -> str:
@@ -112,9 +111,8 @@ def recommend_cdd_level(
         or tier in {"Critical", "High"}
     ):
         target = CDD_ENHANCED
-    elif risk == RISK_MEDIUM or tier == "Medium":
-        target = CDD_STANDARD
     else:
+        # Standard tier removed: Low/Medium customer risk both map to Simplified.
         target = CDD_SIMPLIFIED
 
     if fatf_category in {FATF_CATEGORY_BLACK, FATF_CATEGORY_EDD, FATF_CATEGORY_GREY}:

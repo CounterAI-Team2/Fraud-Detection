@@ -58,7 +58,7 @@ def test_apply_fatf_grey_promotes_medium_standard():
     out = apply_fatf_to_kyc_row(row)
     assert out["FATFListCategory"] == FATF_CATEGORY_GREY
     assert out["RiskStatus"] == "Medium"
-    assert out["CDDLevel"] == "Standard"
+    assert out["CDDLevel"] == "Simplified"  # Standard tier removed → Grey floors at Simplified
 
 
 def test_cdd_rules_respect_fatf_category():

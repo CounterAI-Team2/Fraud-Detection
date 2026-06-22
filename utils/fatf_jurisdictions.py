@@ -23,7 +23,6 @@ from typing import Literal
 from utils.kyc_store import (
     CDD_ENHANCED,
     CDD_SIMPLIFIED,
-    CDD_STANDARD,
     RISK_CRITICAL,
     RISK_HIGH,
     RISK_LOW,
@@ -139,7 +138,7 @@ FATF_CATEGORY_RANK: dict[str, int] = {
     FATF_CATEGORY_BLACK: 3,
 }
 
-_CDD_RANK = {CDD_SIMPLIFIED: 0, CDD_STANDARD: 1, CDD_ENHANCED: 2}
+_CDD_RANK = {CDD_SIMPLIFIED: 0, CDD_ENHANCED: 1}
 _RISK_RANK = {RISK_LOW: 0, RISK_MEDIUM: 1, RISK_HIGH: 2, RISK_CRITICAL: 3}
 
 
@@ -249,7 +248,7 @@ def fatf_cdd_impact(category: str) -> dict[str, str | bool]:
         }
     if category == FATF_CATEGORY_GREY:
         return {
-            "min_cdd": CDD_STANDARD,
+            "min_cdd": CDD_SIMPLIFIED,  # Standard tier removed → Grey floors at Simplified
             "min_risk": RISK_MEDIUM,
             "sm_approval_required": False,
             "flag_reason": "FATF Grey List",
