@@ -222,14 +222,19 @@ def _sanctions_badge(status: str) -> str:
     return f"<span style='color:#555'>—</span>"
 
 
-def _sanctions_table_label(status: str) -> str:
+def _sanctions_table_label(status: str, list_key: str = "") -> str:
     if status == SANCTIONS_REVIEW_PENDING:
-        return "Pending"
-    if status == SANCTIONS_REVIEW_FUZZY:
-        return "Fuzzy"
-    if status == SANCTIONS_REVIEW_CONFIRMED:
-        return "Confirmed"
-    return "—"
+        base = "Pending"
+    elif status == SANCTIONS_REVIEW_FUZZY:
+        base = "Fuzzy"
+    elif status == SANCTIONS_REVIEW_CONFIRMED:
+        base = "Confirmed"
+    else:
+        return "—"
+    if list_key:
+        short = list_key if len(list_key) <= 18 else f"{list_key[:17]}…"
+        return f"{base}\n{short}"
+    return base
 
 def _detail_line(label: str, value: str) -> None:
     display = str(value or "").strip() or "—"
@@ -252,7 +257,8 @@ def _render_kyc_table_row(row: pd.Series) -> None:
     _risk = str(row.get("RiskStatus", "Low"))
     _cdd = str(row.get("CDDLevel", "—")) or "—"
     _sanc = str(row.get("SanctionsReview", ""))
-    _sanc_d = _sanctions_table_label(_sanc)
+    _sanc_key = str(row.get("SanctionsListKey", "")).strip()
+    _sanc_d = _sanctions_table_label(_sanc, _sanc_key)
 
     _cells = [
         f"{_name}\n{_cid}",
@@ -1092,7 +1098,7 @@ with _tab_registry:
 # ══════════════════════════════════════════════════════════════════════════════
 with _tab_sanctions:
     _catalog      = list_catalog_entries()
-    _needs_upload = [e for e in _catalog if e["needs_manual_upload"]]
+    _needs_upload = [e for e in _catalog if e["status"] == "Needs upload"]
 
     _sc_left, _sc_right = st.columns(2, gap="medium")
 
@@ -1112,15 +1118,7 @@ with _tab_sanctions:
                         "Category":     e["category"],
                         "Names":        e["name_count"],
                         "Last Updated": e["last_updated"],
-                        "Status": (
-                            "HTML downloaded"
-                            if e.get("html_path")
-                            else "Landing cached"
-                            if e.get("landing_fetched_at") and e.get("needs_html_download")
-                            else "Needs upload"
-                            if e["needs_manual_upload"]
-                            else "Synced"
-                        ),
+                        "Status":       e["status"],
                     }
                     for e in _catalog
                 ]

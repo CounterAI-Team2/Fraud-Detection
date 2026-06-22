@@ -1071,7 +1071,27 @@ def rescreen_all_kyc_customers() -> dict:
     for _, row in customers.iterrows():
         customer_id = str(row["id"])
         review = str(row.get("SanctionsReview", "")).strip()
-        if review in {SANCTIONS_REVIEW_CONFIRMED, SANCTIONS_REVIEW_CLEARED}:
+        if review == SANCTIONS_REVIEW_CONFIRMED:
+            match_info = _screen_customer_names(
+                str(row.get("FullName", "")),
+                str(row.get("Aliases", "")),
+            )
+            if match_info.get("matched"):
+                new_key = str(match_info.get("list_key") or "")
+                current_key = str(row.get("SanctionsListKey", "")).strip()
+                if new_key and new_key != current_key:
+                    update_kyc_record(
+                        customer_id,
+                        {
+                            "SanctionsMatchedName": str(match_info.get("matched_name", "")),
+                            "SanctionsListKey": new_key,
+                            "SanctionsMatchScore": str(match_info.get("confidence", "")),
+                            "SanctionsMatchType": str(match_info.get("match_type", "")),
+                        },
+                    )
+            skipped_count += 1
+            continue
+        if review == SANCTIONS_REVIEW_CLEARED:
             skipped_count += 1
             continue
 

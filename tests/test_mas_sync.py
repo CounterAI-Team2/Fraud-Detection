@@ -153,6 +153,52 @@ def test_import_uploaded_list_rescreens_kyc(monkeypatch, tmp_path):
     assert result["rescreen"]["exact"] == 2
 
 
+def test_reconcile_catalog_maps_legacy_list_files(monkeypatch, tmp_path):
+    lists_dir = tmp_path / "lists"
+    lists_dir.mkdir(parents=True)
+    monkeypatch.setattr(mss, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(mss, "LISTS_DIR", lists_dir)
+    monkeypatch.setattr(mss, "LANDINGS_DIR", lists_dir / "landings")
+    monkeypatch.setattr(mss, "CATALOG_PATH", tmp_path / "catalog.json")
+    monkeypatch.setattr(mss, "CONSOLIDATED_NAMES_PATH", tmp_path / "names_consolidated.txt")
+
+    (lists_dir / "al-qaida_all_name_legacy.txt").write_text(
+        "AIMAN MUHAMMED RABI AL-ZAWAHIRI\nAGUS DWIKARNA\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "catalog.json").write_text(
+        json.dumps(
+            {
+                "lists": {
+                    "isil-da-esh-and-al-qaida-list": {
+                        "label": "ISIL (Da'esh) and Al-Qaida List",
+                        "category": "Counter-Terrorism",
+                        "needs_manual_upload": True,
+                        "name_count": 0,
+                        "names": [],
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = mss.reconcile_catalog_with_local_files()
+    catalog = json.loads((tmp_path / "catalog.json").read_text())
+
+    assert "isil-da-esh-and-al-qaida-list" in result["updated_keys"]
+    entry = catalog["lists"]["isil-da-esh-and-al-qaida-list"]
+    assert entry["name_count"] == 2
+    assert entry["needs_manual_upload"] is False
+    assert mss.catalog_entry_status(entry) == "Imported"
+    assert mss._list_key_for_name("AGUS DWIKARNA") == "ISIL (Da'esh) and Al-Qaida List"
+
+
+def test_catalog_entry_status_prefers_imported_over_needs_upload():
+    entry = {"name_count": 12, "needs_manual_upload": True}
+    assert mss.catalog_entry_status(entry) == "Imported"
+
+
 def test_rebuild_names_from_downloaded_html_builds_consolidated(tmp_path, monkeypatch):
     monkeypatch.setattr(mss, "DATA_DIR", tmp_path)
     monkeypatch.setattr(mss, "LISTS_DIR", tmp_path / "lists")

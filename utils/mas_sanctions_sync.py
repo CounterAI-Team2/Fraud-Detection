@@ -32,6 +32,26 @@ CATALOG_PATH = DATA_DIR / "catalog.json"
 LAST_SYNC_PATH = DATA_DIR / "last_sync.json"
 CONSOLIDATED_NAMES_PATH = DATA_DIR / "names_consolidated.txt"
 
+# Local UN export filenames (scsanctions legacy HTML) mapped to MAS catalog keys.
+LIST_FILE_ALIASES: dict[str, str] = {
+    "al-qaida_all_name_legacy": "isil-da-esh-and-al-qaida-list",
+    "libya_all_name_legacy": "un-1970-list",
+    "somalia_all_name_legacy": "un-1844-list",
+    "southsudan_all_name_legacy": "un-2206-list",
+    "sudan_all_name_legacy": "un-1591-list",
+    "taliban_all_name_legacy": "un-1988-taliban-list",
+    "yemen_all_name_legacy": "un-2140-list",
+}
+
+# Default metadata when a list file exists but MAS index has no entry yet.
+EXTRA_CATALOG_DEFAULTS: dict[str, dict[str, str]] = {
+    "un-1988-taliban-list": {
+        "label": "UN 1988 Taliban List",
+        "category": "Counter-Terrorism",
+        "list_url": "https://www.un.org/securitycouncil/sanctions/1988/materials",
+    },
+}
+
 # Hosts that host downloadable UN Security Council sanctions list pages.
 UN_SANCTIONS_HOST_SUFFIXES = (
     "un.org",
@@ -714,6 +734,135 @@ def _write_consolidated(names_by_list: dict[str, list[str]]) -> int:
     return len(seen)
 
 
+def _list_file_stems() -> set[str]:
+    stems: set[str] = set()
+    for path in LISTS_DIR.glob("*"):
+        if path.suffix.lower() in {".html", ".htm", ".txt", ".csv", ".tsv"}:
+            stems.add(path.stem)
+    return stems
+
+
+def _load_names_for_stem(stem: str) -> list[str]:
+    txt_path = LISTS_DIR / f"{stem}.txt"
+    if txt_path.exists():
+        return [
+            _normalize_name(line)
+            for line in txt_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+
+    for ext in (".html", ".htm"):
+        html_path = LISTS_DIR / f"{stem}{ext}"
+        if html_path.exists():
+            names = parse_names_from_upload(
+                html_path.read_text(encoding="utf-8"),
+                filename=html_path.name,
+            )
+            write_list_names_file(txt_path, names)
+            return names
+    return []
+
+
+def catalog_entry_status(entry: dict) -> str:
+    """Human-readable import status for one catalog row."""
+    if int(entry.get("name_count", 0) or 0) > 0 or entry.get("names"):
+        return "Imported"
+    names_txt = entry.get("names_txt_path", "")
+    if names_txt and Path(names_txt).exists():
+        return "Imported"
+    html_path = entry.get("html_path", "")
+    if html_path and Path(html_path).exists():
+        return "HTML downloaded"
+    if entry.get("landing_fetched_at") and entry.get("needs_html_download"):
+        return "Landing cached"
+    if entry.get("needs_manual_upload"):
+        return "Needs upload"
+    return "Synced"
+
+
+def reconcile_catalog_with_local_files() -> dict:
+    """
+    Link on-disk list files to catalog entries and refresh name counts.
+
+    Handles legacy UN export filenames (e.g. ``al-qaida_all_name_legacy``) by
+    mapping them to the MAS catalog keys used on the index page.
+    """
+    _ensure_dirs()
+    catalog = _read_catalog()
+    catalog_lists: dict[str, dict] = catalog.setdefault("lists", {})
+    updated_keys: list[str] = []
+    names_by_list: dict[str, list[str]] = {}
+    prior_total = _existing_name_count()
+
+    for stem in sorted(_list_file_stems()):
+        names = _load_names_for_stem(stem)
+        if not names:
+            continue
+
+        catalog_key = LIST_FILE_ALIASES.get(stem, stem)
+        entry = dict(catalog_lists.get(catalog_key, {}))
+        defaults = EXTRA_CATALOG_DEFAULTS.get(catalog_key, {})
+
+        html_path = next(
+            (LISTS_DIR / f"{stem}{ext}" for ext in (".html", ".htm") if (LISTS_DIR / f"{stem}{ext}").exists()),
+            None,
+        )
+        txt_path = LISTS_DIR / f"{stem}.txt"
+
+        entry.update(
+            {
+                "label": entry.get("label") or defaults.get("label") or stem.replace("_", " ").replace("-", " ").title(),
+                "category": entry.get("category") or defaults.get("category", ""),
+                "list_url": entry.get("list_url") or defaults.get("list_url", ""),
+                "name_count": len(names),
+                "names": names,
+                "names_txt_path": str(txt_path),
+                "needs_manual_upload": False,
+                "needs_html_download": False,
+                "last_error": "",
+                "source": entry.get("source") or "local",
+                "downloaded_at": entry.get("downloaded_at") or _utc_now_iso(),
+            }
+        )
+        if html_path:
+            entry["html_path"] = str(html_path)
+            entry["source_path"] = str(html_path)
+
+        catalog_lists[catalog_key] = entry
+        names_by_list[catalog_key] = names
+        updated_keys.append(catalog_key)
+
+    for key, entry in catalog_lists.items():
+        if int(entry.get("name_count", 0) or 0) > 0 or entry.get("names"):
+            entry["needs_manual_upload"] = False
+            entry["last_error"] = ""
+            names_by_list.setdefault(key, list(entry.get("names", [])))
+
+    catalog["lists"] = catalog_lists
+    catalog["reconciled_at"] = _utc_now_iso()
+    _write_catalog(catalog)
+    total = _write_consolidated(names_by_list)
+    if updated_keys or total != prior_total:
+        _invalidate_kyc_sanctions_fingerprint()
+    return {
+        "updated_keys": updated_keys,
+        "imported_lists": sum(1 for meta in catalog_lists.values() if int(meta.get("name_count", 0) or 0) > 0),
+        "name_count": total,
+    }
+
+
+def _invalidate_kyc_sanctions_fingerprint() -> None:
+    try:
+        from utils.kyc_store import KYC_META_PATH, _read_generation_meta
+
+        meta = _read_generation_meta()
+        meta.pop("sanctions_screen_fingerprint", None)
+        KYC_META_PATH.parent.mkdir(parents=True, exist_ok=True)
+        KYC_META_PATH.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
 def _apply_parsed_names(entry: dict) -> list[str]:
     html_path = entry.get("html_path", "")
     if not html_path or not Path(html_path).exists():
@@ -728,32 +877,12 @@ def _apply_parsed_names(entry: dict) -> list[str]:
 
 
 def rebuild_names_from_downloaded_html() -> dict:
-    """Parse every list HTML under ``lists/`` and rebuild consolidated names."""
-    _ensure_dirs()
-    catalog = _read_catalog()
-    catalog_lists = catalog.get("lists", {})
-    names_by_list: dict[str, list[str]] = {}
-    parsed_keys: list[str] = []
-
-    for html_path in sorted(LISTS_DIR.glob("*.html")):
-        names = parse_names_from_file(html_path)
-        list_key = html_path.stem
-        names_by_list[list_key] = names
-        parsed_keys.append(list_key)
-
-        for entry in catalog_lists.values():
-            if entry.get("html_path") == str(html_path):
-                entry["names"] = names
-                entry["name_count"] = len(names)
-                entry["names_txt_path"] = str(list_names_txt_path(html_path))
-
-    catalog["lists"] = catalog_lists
-    _write_catalog(catalog)
-    total = _write_consolidated(names_by_list)
+    """Parse every list file under ``lists/`` and rebuild consolidated names."""
+    result = reconcile_catalog_with_local_files()
     return {
-        "lists_parsed": len(parsed_keys),
-        "name_count": total,
-        "parsed_keys": parsed_keys,
+        "lists_parsed": result["imported_lists"],
+        "name_count": result["name_count"],
+        "parsed_keys": result["updated_keys"],
     }
 
 
@@ -921,7 +1050,8 @@ def sync_mas_sanctions(force: bool = False) -> SyncResult:
     catalog["lists_discovered"] = len(rows)
     _write_catalog(catalog)
 
-    total = _write_consolidated(names_by_list)
+    reconcile_catalog_with_local_files()
+    total = _existing_name_count()
 
     if lists_updated and not errors:
         status = "ok" if total else "partial"
@@ -951,9 +1081,11 @@ def sync_mas_sanctions(force: bool = False) -> SyncResult:
 
 def list_catalog_entries() -> list[dict]:
     """Return a UI-friendly view of the current catalog."""
+    reconcile_catalog_with_local_files()
     catalog = _read_catalog().get("lists", {})
     rows: list[dict] = []
     for key, meta in catalog.items():
+        status = catalog_entry_status(meta)
         rows.append(
             {
                 "key": key,
@@ -964,11 +1096,13 @@ def list_catalog_entries() -> list[dict]:
                 "landing_fetched_at": meta.get("landing_fetched_at", ""),
                 "download_url": meta.get("download_url", ""),
                 "html_path": meta.get("html_path", ""),
+                "names_txt_path": meta.get("names_txt_path", ""),
                 "downloaded_at": meta.get("downloaded_at", ""),
-                "name_count": meta.get("name_count", 0),
+                "name_count": int(meta.get("name_count", 0) or 0),
                 "source": meta.get("source", ""),
                 "needs_html_download": bool(meta.get("needs_html_download", False)),
-                "needs_manual_upload": bool(meta.get("needs_manual_upload", False)),
+                "needs_manual_upload": status == "Needs upload",
+                "status": status,
                 "last_error": meta.get("last_error", ""),
             }
         )
@@ -1030,23 +1164,8 @@ def import_uploaded_list(
     catalog["index_fetched_at"] = catalog.get("index_fetched_at", _utc_now_iso())
     _write_catalog(catalog)
 
-    names_by_list = {k: meta.get("names", []) for k, meta in catalog_lists.items()}
-    for html_path in sorted(LISTS_DIR.glob("*.html")):
-        list_key = html_path.stem
-        if list_key not in names_by_list:
-            names_by_list[list_key] = parse_names_from_file(html_path)
-    for txt_path in sorted(LISTS_DIR.glob("*.txt")):
-        list_key = txt_path.stem
-        if list_key not in names_by_list:
-            file_names = [
-                _normalize_name(line)
-                for line in txt_path.read_text(encoding="utf-8").splitlines()
-                if line.strip()
-            ]
-            if file_names:
-                names_by_list[list_key] = file_names
-    total = _write_consolidated(names_by_list)
-    _clear_screening_cache()
+    reconcile_result = reconcile_catalog_with_local_files()
+    total = reconcile_result["name_count"]
 
     rescreen_result = None
     if rescreen:
@@ -1089,14 +1208,23 @@ def _load_consolidated_names() -> frozenset[str]:
 
 def _clear_screening_cache() -> None:
     _load_consolidated_names.cache_clear()
+    _name_to_list_label.cache_clear()
+
+
+@lru_cache(maxsize=1)
+def _name_to_list_label() -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for _key, meta in _read_catalog().get("lists", {}).items():
+        label = str(meta.get("label") or _key).strip()
+        for name in meta.get("names", []):
+            normalized = _normalize_name(name)
+            if normalized:
+                mapping[normalized] = label
+    return mapping
 
 
 def _list_key_for_name(name: str) -> str | None:
-    catalog = _read_catalog().get("lists", {})
-    for key, meta in catalog.items():
-        if name in {_normalize_name(n) for n in meta.get("names", [])}:
-            return meta.get("label") or key
-    return None
+    return _name_to_list_label().get(_normalize_name(name))
 
 
 def screen_name(full_name: str) -> dict:
