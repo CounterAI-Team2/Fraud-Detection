@@ -18,6 +18,7 @@ AUDIT_V2_PATH = DATA_DIR / "audit_log_v2.csv"
 HITL_PATH = DATA_DIR / "hitl_feedback.csv"
 ARCHIVE_PATH = DATA_DIR / "str_archive.csv"
 STR_CASES_PATH = DATA_DIR / "str_cases.csv"
+CDD_REVIEWS_PATH = DATA_DIR / "cdd_reviews.csv"
 REGISTRY_PATH = DATA_DIR / "model_registry.json"
 
 CUSTOMER_COLUMNS = [
@@ -139,6 +140,30 @@ ARCHIVE_COLUMNS = [
     "summary_json",
 ]
 
+# CDD review records (SCDD / ECDD). Queryable columns are explicit; the full form
+# payload is JSON-encoded in `payload_json` so the schema stays stable as fields evolve.
+CDD_REVIEW_COLUMNS = [
+    "review_id",
+    "customer_id",
+    "account_no",
+    "customer_name",
+    "customer_type",       # Individual | Corporate
+    "cdd_type",            # SCDD | ECDD
+    "status",              # Draft | PendingApproval | Approved | Rejected | Completed
+    "risk_rating",
+    "eligibility_status",  # Eligible | Blocked (SCDD only)
+    "completed_by",
+    "completed_at",
+    "sm_status",           # "" | Pending | Approved | Rejected (ECDD only)
+    "sm_approver",
+    "sm_role",
+    "sm_decision_at",
+    "next_review_date",
+    "created_at",
+    "updated_at",
+    "payload_json",
+]
+
 DEFAULT_WATCHLIST = [
     {
         "watchlist_id": "WL-001",
@@ -193,6 +218,7 @@ def ensure_reference_data() -> None:
     ensure_csv_store(HITL_PATH, HITL_COLUMNS)
     ensure_csv_store(STR_CASES_PATH, STR_CASE_COLUMNS)
     ensure_csv_store(ARCHIVE_PATH, ARCHIVE_COLUMNS)
+    ensure_csv_store(CDD_REVIEWS_PATH, CDD_REVIEW_COLUMNS)
     ensure_json_store(REGISTRY_PATH, {"models": []})
 
     _ensure_parent(SANCTIONS_PATH)
@@ -471,6 +497,37 @@ def upsert_str_case(str_row: dict[str, Any]) -> dict[str, Any]:
     else:
         cases = pd.concat([cases, pd.DataFrame([row])], ignore_index=True)
     write_csv_store(STR_CASES_PATH, cases, STR_CASE_COLUMNS)
+    return row
+
+
+def make_review_id() -> str:
+    return f"CDD-{uuid.uuid4().hex[:8].upper()}"
+
+
+def get_cdd_reviews() -> pd.DataFrame:
+    return read_csv_store(CDD_REVIEWS_PATH, CDD_REVIEW_COLUMNS)
+
+
+def upsert_cdd_review(review_row: dict[str, Any]) -> dict[str, Any]:
+    reviews = get_cdd_reviews()
+    now = utc_now_iso()
+    row = {column: review_row.get(column, "") for column in CDD_REVIEW_COLUMNS}
+    row["updated_at"] = now
+    row["created_at"] = row.get("created_at") or now
+
+    if not row["review_id"]:
+        row["review_id"] = make_review_id()
+
+    if reviews.empty:
+        write_csv_store(CDD_REVIEWS_PATH, pd.DataFrame([row]), CDD_REVIEW_COLUMNS)
+        return row
+
+    match_idx = reviews.index[reviews["review_id"].astype(str) == str(row["review_id"])].tolist()
+    if match_idx:
+        reviews.loc[match_idx[0], CDD_REVIEW_COLUMNS] = [row.get(column, "") for column in CDD_REVIEW_COLUMNS]
+    else:
+        reviews = pd.concat([reviews, pd.DataFrame([row])], ignore_index=True)
+    write_csv_store(CDD_REVIEWS_PATH, reviews, CDD_REVIEW_COLUMNS)
     return row
 
 

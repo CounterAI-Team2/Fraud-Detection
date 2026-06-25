@@ -1,0 +1,1 @@
+review_id,customer_id,account_no,customer_name,customer_type,cdd_type,status,risk_rating,eligibility_status,completed_by,completed_at,sm_status,sm_approver,sm_role,sm_decision_at,next_review_date,created_at,updated_at,payload_json

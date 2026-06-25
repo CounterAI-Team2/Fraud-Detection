@@ -417,6 +417,12 @@ with st.container(border=True):
             )
             st.switch_page("pages/5_STR_Generation.py")
 
+    if cdd_level == CDD_LEVEL_ENHANCED:
+        if st.button("Open ECDD Review", use_container_width=True):
+            st.session_state["cdd_customer_id"] = str(selected_txn["customer_id"])
+            st.session_state["cdd_mode"] = "ECDD"
+            st.switch_page("pages/9_CDD_Review.py")
+
     if st.button("Close Case", use_container_width=True):
         updated_case = update_case_record(
             existing_case["case_id"],

@@ -387,6 +387,7 @@ def _complete_enrolment(pending: dict) -> None:
     elif indicators:
         msg += f" Risk set to **High** ({', '.join(indicators)})."
     st.session_state["kyc_enrol_success"] = msg
+    st.session_state["kyc_enrolled_id"] = row["id"]
 
 
 @st.dialog("Enrol New Customer", width="large")
@@ -970,6 +971,11 @@ with _tab_registry:
     _success = st.session_state.pop("kyc_enrol_success", None)
     if _success:
         st.success(_success)
+        _enrolled_id = st.session_state.pop("kyc_enrolled_id", None)
+        if _enrolled_id and st.button("Complete SCDD for this customer", key="kyc_to_scdd"):
+            st.session_state["cdd_customer_id"] = str(_enrolled_id)
+            st.session_state["cdd_mode"] = "SCDD"
+            st.switch_page("pages/9_CDD_Review.py")
 
     if "kyc_applied_filters" not in st.session_state:
         st.session_state["kyc_applied_filters"] = {
