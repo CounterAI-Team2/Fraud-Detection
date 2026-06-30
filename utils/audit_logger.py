@@ -26,12 +26,12 @@ def log_action(
     action,
     transaction_id="",
     details="",
-    analyst_id="Analyst",
+    analyst_id="alice.analyst",
     module="general",
     event_type="user_action",
     entity_type="transaction",
     entity_id="",
-    actor_role="Analyst",
+    actor_role="AML Analyst",
     payload: dict[str, Any] | None = None,
 ):
     _ensure_parent()

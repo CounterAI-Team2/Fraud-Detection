@@ -7,12 +7,14 @@ from utils.sidebar import render_sidebar
 from utils.audit_helpers import log_alert_dismissed, log_alert_escalated, log_prediction_feedback
 from utils.aml_services import ensure_case_for_transaction, ensure_scored_defaults, record_hitl_feedback
 from utils.constants import (
+    ALERT_ACTION_ROLES,
     ALERT_QUEUE_DISPLAY_LIMIT,
     ALERT_STATUS_DISMISSED,
     ALERT_STATUS_ESCALATED,
     ALERT_STATUS_NEW,
+    display_role,
 )
-from utils.session_utils import get_current_analyst, require_scored_df
+from utils.session_utils import can_act, get_current_analyst, is_read_only, require_scored_df
 
 render_sidebar()
 
@@ -22,6 +24,13 @@ st.caption("Review scored transactions, dismiss false positives, or escalate to 
 require_scored_df()
 scored_df = st.session_state["scored_df"]
 analyst_id, actor_role = get_current_analyst()
+_can_action_alerts = can_act(actor_role, ALERT_ACTION_ROLES)
+_read_only = is_read_only(actor_role)
+if not _can_action_alerts:
+    st.info(
+        f"Your role ({display_role(actor_role)}) can review alerts but cannot escalate, "
+        "dismiss, or submit HITL feedback. Action buttons are disabled."
+    )
 
 scored_df = ensure_scored_defaults(scored_df)
 st.session_state["scored_df"] = scored_df
@@ -179,7 +188,13 @@ for _, row in view.head(ALERT_QUEUE_DISPLAY_LIMIT).iterrows():
             )
         else:
             _ac1, _ac2 = _c5.columns(2)
-            if _ac1.button("Escalate", key=f"esc_{txid}", type="primary", use_container_width=True):
+            if _ac1.button(
+                "Escalate",
+                key=f"esc_{txid}",
+                type="primary",
+                use_container_width=True,
+                disabled=not _can_action_alerts,
+            ):
                 status_map[txid] = {"status": ALERT_STATUS_ESCALATED, "reason": status_map.get(txid, {}).get("reason", "")}
                 st.session_state["alert_status"] = status_map
                 st.session_state["selected_txn_id"] = txid
@@ -187,7 +202,12 @@ for _, row in view.head(ALERT_QUEUE_DISPLAY_LIMIT).iterrows():
                 st.session_state["selected_case_id"] = _case["case_id"]
                 log_alert_escalated(txid, _case["case_id"], analyst_id, actor_role, tier, score)
                 st.switch_page("pages/4_Case_Investigation.py")
-            if _ac2.button("Dismiss", key=f"dis_{txid}", use_container_width=True):
+            if _ac2.button(
+                "Dismiss",
+                key=f"dis_{txid}",
+                use_container_width=True,
+                disabled=not _can_action_alerts,
+            ):
                 st.session_state[_dismiss_key] = not st.session_state.get(_dismiss_key, False)
                 st.rerun()
 
@@ -197,7 +217,13 @@ for _, row in view.head(ALERT_QUEUE_DISPLAY_LIMIT).iterrows():
             _dismiss_reason = _dr1.selectbox(
                 "Reason", _dismiss_reasons, key=f"reason_{txid}", label_visibility="collapsed"
             )
-            if _dr2.button("Confirm", key=f"confirm_dis_{txid}", type="primary", use_container_width=True):
+            if _dr2.button(
+                "Confirm",
+                key=f"confirm_dis_{txid}",
+                type="primary",
+                use_container_width=True,
+                disabled=not _can_action_alerts,
+            ):
                 status_map[txid] = {"status": ALERT_STATUS_DISMISSED, "reason": _dismiss_reason}
                 st.session_state["alert_status"] = status_map
                 st.session_state[_dismiss_key] = False
@@ -226,9 +252,19 @@ for _, row in view.head(ALERT_QUEUE_DISPLAY_LIMIT).iterrows():
                             unsafe_allow_html=True,
                         )
             st.divider()
-            _fb_label  = st.selectbox("Prediction correction", _feedback_options, key=f"feedback_{txid}")
-            _fb_reason = st.text_input("Correction reason", key=f"feedback_reason_{txid}")
-            if st.button("Log HITL Feedback", key=f"feedback_btn_{txid}"):
+            _fb_label  = st.selectbox(
+                "Prediction correction", _feedback_options, key=f"feedback_{txid}",
+                disabled=not _can_action_alerts,
+            )
+            _fb_reason = st.text_input(
+                "Correction reason", key=f"feedback_reason_{txid}",
+                disabled=not _can_action_alerts,
+            )
+            if st.button(
+                "Log HITL Feedback",
+                key=f"feedback_btn_{txid}",
+                disabled=not _can_action_alerts,
+            ):
                 record_hitl_feedback(
                     transaction_id=txid,
                     customer_id=str(row.get("customer_id", "")),

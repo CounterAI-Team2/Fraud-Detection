@@ -20,7 +20,9 @@ from utils.constants import (
     STR_STATUS_DRAFT,
     STR_STATUS_L1,
     STR_STATUS_L2,
+    display_role,
 )
+from utils.session_utils import gates_bypassed
 
 # Map the STR's current status to the action that advances it.
 _STATUS_TO_ACTION = {
@@ -75,10 +77,12 @@ def authorize(action: str, actor_id: str, role: str, record: dict) -> tuple[bool
     """
     if action is None:
         return False, "role", "This STR is already approved — no further action."
+    if gates_bypassed():
+        return True, "ok", "Debug bypass active — gates ignored for solo testing."
     if not can_perform(action, role):
-        roles = ", ".join(sorted(allowed_roles(action)))
-        return False, "role", f"Your role ({role}) cannot perform this step. Requires: {roles}."
+        roles = ", ".join(display_role(r) for r in sorted(allowed_roles(action)))
+        return False, "role", f"Your role ({display_role(role)}) cannot perform this step. Requires: {roles}."
     sod = sod_violation(action, actor_id, record)
     if sod:
         return False, "sod", f"Segregation of duties: {sod}"
-    return True, "ok", f"You ({role} · {actor_id}) are authorised to perform this step."
+    return True, "ok", f"You ({display_role(role)} · {actor_id}) are authorised to perform this step."

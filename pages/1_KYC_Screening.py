@@ -10,7 +10,12 @@ from utils.sidebar import render_sidebar
 from utils.constants import (
     CUSTOMER_RISK_STATUSES,
     FLAG_REASON_PEP,
+    KYC_ENROL_ROLES,
+    KYC_RISK_MAKER_ROLES,
+    REF_DATA_ROLES,
+    SANCTIONS_DISPOSITION_ROLES,
     SM_APPROVAL_PENDING,
+    display_role,
 )
 from utils.kyc_store import (
     CUSTOMER_RISK_STATUSES as KYC_RISK_STATUSES,
@@ -46,11 +51,16 @@ from utils.mas_sanctions_sync import (
     screen_name,
     sync_mas_sanctions,
 )
-from utils.session_utils import get_current_analyst
+from utils.session_utils import can_act, get_current_analyst, is_read_only
 
 render_sidebar()
 ensure_kyc_database()
 actor_id, actor_role = get_current_analyst()
+_can_enrol = can_act(actor_role, KYC_ENROL_ROLES)
+_can_risk_edit = can_act(actor_role, KYC_RISK_MAKER_ROLES)
+_can_sanctions_action = can_act(actor_role, SANCTIONS_DISPOSITION_ROLES)
+_can_ref_data = can_act(actor_role, REF_DATA_ROLES)
+_read_only = is_read_only(actor_role)
 
 st.title("KYC Screening")
 st.caption("Enrol and manage customers, screen against sanctions lists, and maintain KYC risk profiles.")
@@ -536,7 +546,10 @@ def _enrol_dialog() -> None:
         _flag_reason = st.text_input("Flagging reason", placeholder="Required if indicator selected")
         _comments = st.text_area("Internal comments", height=60, placeholder="Optional analyst notes")
 
-        _submitted = st.form_submit_button("Submit enrolment", type="primary", use_container_width=True)
+        _submitted = st.form_submit_button(
+            "Submit enrolment", type="primary", use_container_width=True,
+            disabled=not _can_enrol,
+        )
 
     if _submitted:
         _errors: list[str] = []
@@ -745,7 +758,12 @@ def _customer_detail_dialog(customer_id: str) -> None:
         _cur_pep = str(row.get("IsPEP", "")).strip().lower() == "yes"
         _cur_sm = str(row.get("SMApprovalStatus", ""))
         if _cur_sm == SM_APPROVAL_PENDING:
-            st.warning("Pending Senior Management approval.")
+            st.warning("Pending MLRO approval.")
+        if not _can_risk_edit:
+            st.caption(
+                f"Risk changes require AML Analyst or Senior Investigator role. "
+                f"Current role: {display_role(actor_role)}."
+            )
 
         _rmc1, _rmc2 = st.columns(2)
         _new_risk = _rmc1.selectbox(
@@ -753,20 +771,33 @@ def _customer_detail_dialog(customer_id: str) -> None:
             CUSTOMER_RISK_STATUSES,
             index=CUSTOMER_RISK_STATUSES.index(_risk) if _risk in CUSTOMER_RISK_STATUSES else 0,
             key=f"detail_risk_{customer_id}",
+            disabled=not _can_risk_edit,
         )
         _reason_opts = ["Manual", "PEP", "High-risk jurisdiction", "Complex profile", "Other"]
-        _reason = _rmc2.selectbox("Reason", _reason_opts, key=f"detail_reason_{customer_id}")
+        _reason = _rmc2.selectbox(
+            "Reason", _reason_opts, key=f"detail_reason_{customer_id}",
+            disabled=not _can_risk_edit,
+        )
         _custom_reason = ""
         if _reason == "Other":
-            _custom_reason = st.text_input("Specify reason", key=f"detail_custom_{customer_id}")
-        _is_pep = st.checkbox("Flag as PEP", value=_cur_pep, key=f"detail_pep_{customer_id}")
+            _custom_reason = st.text_input(
+                "Specify reason", key=f"detail_custom_{customer_id}",
+                disabled=not _can_risk_edit,
+            )
+        _is_pep = st.checkbox(
+            "Flag as PEP", value=_cur_pep, key=f"detail_pep_{customer_id}",
+            disabled=not _can_risk_edit,
+        )
 
         _final_risk = RISK_CRITICAL if _is_pep else _new_risk
         _final_reason = FLAG_REASON_PEP if _is_pep else (_custom_reason.strip() if _reason == "Other" else _reason)
         if _is_pep and _new_risk != RISK_CRITICAL:
             st.info("PEP flag sets risk to Critical.")
 
-        if st.button("Save risk changes", type="primary", key=f"detail_save_{customer_id}"):
+        if st.button(
+            "Save risk changes", type="primary", key=f"detail_save_{customer_id}",
+            disabled=not _can_risk_edit,
+        ):
             _aid2, _arole2 = get_current_analyst()
             _updated = set_customer_risk_status(
                 customer_id=customer_id,
@@ -831,9 +862,17 @@ def _fuzzy_sanctions_review_dialog() -> None:
         f"- **List:** {_list_disp}"
     )
     st.caption(f"{len(queue)} customer(s) awaiting sanctions confirmation.")
+    if not _can_sanctions_action:
+        st.caption(
+            f"Your role ({display_role(actor_role)}) cannot dispose of sanctions matches. "
+            "Confirm and Clear are disabled; you may still defer with Review later."
+        )
 
     _c1, _c2, _c3 = st.columns(3)
-    if _c1.button("Confirm sanctions match", type="primary", use_container_width=True, key="fuzzy_confirm"):
+    if _c1.button(
+        "Confirm sanctions match", type="primary", use_container_width=True, key="fuzzy_confirm",
+        disabled=not _can_sanctions_action,
+    ):
         apply_confirmed_sanctions_match(customer_id, item, actor_id=actor_id)
         log_action(
             action="sanctions_match_confirmed",
@@ -848,7 +887,10 @@ def _fuzzy_sanctions_review_dialog() -> None:
         )
         st.session_state["kyc_fuzzy_sanctions_queue"] = queue[1:]
         st.rerun()
-    if _c2.button("Not a match — clear flag", use_container_width=True, key="fuzzy_clear"):
+    if _c2.button(
+        "Not a match — clear flag", use_container_width=True, key="fuzzy_clear",
+        disabled=not _can_sanctions_action,
+    ):
         clear_sanctions_match(customer_id, actor_id=actor_id)
         log_action(
             action="sanctions_match_cleared",
@@ -900,7 +942,7 @@ with st.container(border=True):
         f"padding:3px 10px;font-size:12px;font-weight:600'>{_b_label}</span>",
         unsafe_allow_html=True,
     )
-    if _b4.button("Refresh", key="banner_refresh"):
+    if _b4.button("Refresh", key="banner_refresh", disabled=not _can_ref_data):
         st.session_state["mas_sync_result"] = sync_mas_sanctions(force=True).to_dict()
         st.rerun()
 
@@ -1009,7 +1051,10 @@ with _tab_registry:
             key="kyc_search_input",
         )
     with _toolbar_m:
-        if st.button("Rescreen sanctions", use_container_width=True):
+        if st.button(
+            "Rescreen sanctions", use_container_width=True,
+            disabled=not _can_sanctions_action,
+        ):
             with st.spinner("Rescreening all customers…"):
                 _manual = force_rescreen_kyc_sanctions()
                 st.session_state["kyc_rescreen_summary"] = _manual
@@ -1017,7 +1062,10 @@ with _tab_registry:
                     st.session_state["kyc_fuzzy_sanctions_queue"] = _manual["fuzzy_queue"]
             st.rerun()
     with _toolbar_r:
-        if st.button("+ Enrol new customer", type="primary", use_container_width=True):
+        if st.button(
+            "+ Enrol new customer", type="primary", use_container_width=True,
+            disabled=not _can_enrol,
+        ):
             st.session_state.pop("kyc_pending_enrol", None)
             _enrol_dialog()
 
@@ -1266,6 +1314,7 @@ with _tab_flags:
                         use_container_width=True,
                         on_click=_open_sanctions_review,
                         args=(_fcid,),
+                        disabled=not _can_sanctions_action,
                     )
 
 
@@ -1309,24 +1358,36 @@ with _tab_sanctions:
                 "Upload HTML exports from MAS/UN, or plain text / CSV name lists (one name per line). "
                 "Names are parsed, saved, merged into the consolidated list, and customers are rescreened."
             )
+            if not _can_ref_data:
+                st.info(
+                    f"Reference-data uploads are restricted to System Administrator. "
+                    f"Current role: {display_role(actor_role)}."
+                )
             _uploaded_html = st.file_uploader(
                 "Name list file(s)",
                 type=["html", "htm", "txt", "csv", "tsv"],
                 accept_multiple_files=True,
                 key="mas_manual_upload",
+                disabled=not _can_ref_data,
             )
             _existing_keys  = [e["key"] for e in _catalog]
             _target_options = ["Auto from filename", "New custom list", *_existing_keys]
-            _target = st.selectbox("Assign to catalog entry", _target_options)
+            _target = st.selectbox(
+                "Assign to catalog entry", _target_options,
+                disabled=not _can_ref_data,
+            )
 
             _custom_key = _custom_label = _custom_category = _custom_lu = ""
             if _target == "New custom list":
-                _custom_label    = st.text_input("List label",    placeholder="e.g. UN 1737 (Iran) - manual")
-                _custom_key      = st.text_input("List key",      placeholder="e.g. un-1737-list")
-                _custom_category = st.text_input("Category",      placeholder="e.g. Iran")
-                _custom_lu       = st.text_input("Last Updated",  placeholder="e.g. 27 Sep 2025")
+                _custom_label    = st.text_input("List label",    placeholder="e.g. UN 1737 (Iran) - manual", disabled=not _can_ref_data)
+                _custom_key      = st.text_input("List key",      placeholder="e.g. un-1737-list", disabled=not _can_ref_data)
+                _custom_category = st.text_input("Category",      placeholder="e.g. Iran", disabled=not _can_ref_data)
+                _custom_lu       = st.text_input("Last Updated",  placeholder="e.g. 27 Sep 2025", disabled=not _can_ref_data)
 
-            if _uploaded_html and st.button("Import Files", type="primary", use_container_width=True):
+            if _uploaded_html and st.button(
+                "Import Files", type="primary", use_container_width=True,
+                disabled=not _can_ref_data,
+            ):
                 _aid4, _arole4 = get_current_analyst()
                 _results, _errors = [], []
                 _rescreen_exact = 0

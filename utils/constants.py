@@ -1,9 +1,61 @@
 from __future__ import annotations
 
-# --- Actor defaults ---
-DEFAULT_ACTOR_ID   = "John.Doe"
-DEFAULT_ACTOR_ROLE = "Admin"
-ANALYST_ROLES      = ["Admin", "Analyst", "Compliance Officer", "Senior Management"]
+# --- Actor defaults & role model (Three Lines of Defence) ---
+# Stable internal role keys. Use these everywhere — audit log, permission sets,
+# persisted records. Display labels (see ROLE_LABELS) are for UI only.
+ROLE_AML_ANALYST          = "AML Analyst"
+ROLE_SENIOR_INVESTIGATOR  = "Senior Investigator"
+ROLE_MLRO                 = "MLRO"
+ROLE_AUDITOR              = "Auditor"
+ROLE_SYS_ADMIN            = "System Administrator"
+
+ANALYST_ROLES = [
+    ROLE_AML_ANALYST,
+    ROLE_SENIOR_INVESTIGATOR,
+    ROLE_MLRO,
+    ROLE_AUDITOR,
+    ROLE_SYS_ADMIN,
+]
+
+# UI-facing labels (the keys above remain the stored values).
+ROLE_LABELS: dict[str, str] = {
+    ROLE_AML_ANALYST:         "AML Analyst",
+    ROLE_SENIOR_INVESTIGATOR: "Senior Investigator / Team Lead",
+    ROLE_MLRO:                "MLRO / Compliance Officer",
+    ROLE_AUDITOR:             "Auditor",
+    ROLE_SYS_ADMIN:           "System Administrator",
+}
+
+# Legacy role strings (pre-refactor) → new keys. Used only for **display** of
+# historical audit-log rows; never re-evaluated for authorization.
+LEGACY_ROLE_ALIASES: dict[str, str] = {
+    "Analyst":            ROLE_AML_ANALYST,
+    "Compliance Officer": ROLE_MLRO,
+    "Senior Management":  ROLE_MLRO,
+    "Admin":              ROLE_SYS_ADMIN,
+}
+
+
+def display_role(role: str) -> str:
+    """Return the friendly UI label for a stored role key, aliasing legacy strings."""
+    if not role:
+        return ""
+    key = LEGACY_ROLE_ALIASES.get(role, role)
+    return ROLE_LABELS.get(key, role)
+
+
+DEFAULT_ACTOR_ID   = "alice.analyst"
+DEFAULT_ACTOR_ROLE = ROLE_AML_ANALYST
+
+# Demo identities seeded for the sidebar quick-switch / SoD walkthrough.
+# Each role represented by a distinct user_id so maker ≠ checker is achievable.
+DEMO_IDENTITIES: list[dict[str, str]] = [
+    {"user_id": "alice.analyst", "role": ROLE_AML_ANALYST,         "display": "Alice — AML Analyst"},
+    {"user_id": "dan.invest",    "role": ROLE_SENIOR_INVESTIGATOR, "display": "Dan — Senior Investigator"},
+    {"user_id": "carol.mlro",    "role": ROLE_MLRO,                "display": "Carol — MLRO"},
+    {"user_id": "ivan.audit",    "role": ROLE_AUDITOR,             "display": "Ivan — Auditor"},
+    {"user_id": "sam.admin",     "role": ROLE_SYS_ADMIN,           "display": "Sam — System Administrator"},
+]
 
 # --- Alert statuses ---
 ALERT_STATUS_NEW       = "New"
@@ -65,20 +117,33 @@ STR_ACTION_DRAFT_SUBMIT = "draft_submit"   # Draft  -> L1 Review
 STR_ACTION_L1_APPROVE   = "l1_approve"     # L1     -> L2 Review
 STR_ACTION_L2_APPROVE   = "l2_approve"     # L2     -> Approved / Archived
 
-# Which roles may perform each action. Admin is included for demo convenience but
-# is still bound by segregation of duties (see utils/str_authz.py).
+# Three-Lines-of-Defence role permissions. No role bypasses the gate;
+# segregation of duties is enforced in utils/str_authz.py.
 STR_ROLE_PERMISSIONS = {
-    STR_ACTION_DRAFT_SUBMIT: {"Analyst", "Admin"},
-    STR_ACTION_L1_APPROVE:   {"Compliance Officer", "Admin"},
-    STR_ACTION_L2_APPROVE:   {"Senior Management", "Admin"},
+    STR_ACTION_DRAFT_SUBMIT: {ROLE_AML_ANALYST, ROLE_SENIOR_INVESTIGATOR},
+    STR_ACTION_L1_APPROVE:   {ROLE_SENIOR_INVESTIGATOR},
+    STR_ACTION_L2_APPROVE:   {ROLE_MLRO},
 }
 
 # Human-readable owning role per gate (for stage cards / messages).
 STR_GATE_ROLE_LABEL = {
-    STR_STATUS_DRAFT: "Analyst",
-    STR_STATUS_L1:    "Compliance Officer",
-    STR_STATUS_L2:    "Senior Management",
+    STR_STATUS_DRAFT: ROLE_AML_ANALYST,
+    STR_STATUS_L1:    ROLE_SENIOR_INVESTIGATOR,
+    STR_STATUS_L2:    ROLE_MLRO,
 }
+
+# --- Capability role sets (single source of truth for the access matrix) ---
+AUDIT_SEE_ALL_ROLES         = {ROLE_MLRO, ROLE_AUDITOR, ROLE_SYS_ADMIN}
+CRITICAL_APPROVE_ROLES      = {ROLE_MLRO}
+REF_DATA_ROLES              = {ROLE_SYS_ADMIN}
+KYC_ENROL_ROLES             = {ROLE_AML_ANALYST, ROLE_SENIOR_INVESTIGATOR}
+KYC_RISK_MAKER_ROLES        = {ROLE_AML_ANALYST, ROLE_SENIOR_INVESTIGATOR}
+ALERT_ACTION_ROLES          = {ROLE_AML_ANALYST, ROLE_SENIOR_INVESTIGATOR}
+CASE_ACTION_ROLES           = {ROLE_AML_ANALYST, ROLE_SENIOR_INVESTIGATOR}
+SANCTIONS_DISPOSITION_ROLES = {ROLE_AML_ANALYST, ROLE_SENIOR_INVESTIGATOR}
+DATA_UPLOAD_SCORE_ROLES     = {ROLE_AML_ANALYST, ROLE_SENIOR_INVESTIGATOR, ROLE_SYS_ADMIN}
+GOVERNANCE_SIGNOFF_ROLES    = {ROLE_MLRO}
+GOVERNANCE_CONFIG_ROLES     = {ROLE_SYS_ADMIN}
 
 # Suspicious-transaction typologies offered as reason codes on the STR form.
 STR_REASON_CODES = [

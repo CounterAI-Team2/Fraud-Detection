@@ -305,6 +305,10 @@ def apply_fatf_to_kyc_row(row: dict[str, str]) -> dict[str, str]:
 
         row["SMApprovalStatus"] = SM_APPROVAL_PENDING
         row["RiskStatus"] = RISK_CRITICAL
+        # System-promoted critical: record a synthetic promoter so MLRO SoD
+        # has a non-empty counterparty and any human MLRO can approve.
+        if not str(row.get("promoted_by", "") or "").strip():
+            row["promoted_by"] = "system:fatf"
 
     note = str(impact["onboarding_note"])
     if note:

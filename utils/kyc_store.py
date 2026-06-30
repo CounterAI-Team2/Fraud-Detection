@@ -82,6 +82,7 @@ KYC_COLUMNS = [
     "SMApprovalStatus",
     "SMApprovedBy",
     "SMApprovedAt",
+    "promoted_by",
     # --- 5. Corporate / business (when customer_type == Corporate) ---
     "CompanyRegistrationNo",
     "RegisteredOperatingAddress",
@@ -1457,10 +1458,14 @@ def set_customer_risk_status(
         updates["SMApprovalStatus"] = SM_APPROVAL_PENDING
         updates["SMApprovedBy"] = ""
         updates["SMApprovedAt"] = ""
+        # Record who promoted to Critical so the MLRO approver can be checked
+        # for segregation of duties on the Management Dashboard.
+        updates["promoted_by"] = actor_id
     elif old_status == RISK_CRITICAL:
         updates["SMApprovalStatus"] = ""
         updates["SMApprovedBy"] = ""
         updates["SMApprovedAt"] = ""
+        updates["promoted_by"] = ""
 
     if is_pep is True:
         updates["IsPEP"] = "Yes"
@@ -1471,8 +1476,22 @@ def set_customer_risk_status(
 
 
 def approve_critical_customer(customer_id: str, sm_actor_id: str) -> dict[str, str] | None:
-    """Senior Management approves a Critical-flagged customer."""
+    """MLRO approves a Critical-flagged customer.
+
+    Refuses (returns None) if the approver is the same person who promoted the
+    customer to Critical — segregation of duties, as a defensive check behind
+    the UI gate on the Management Dashboard.
+    """
     from utils.constants import SM_APPROVAL_APPROVED
+
+    customers = get_kyc_customers()
+    mask = customers["id"].astype(str) == str(customer_id)
+    if not mask.any():
+        return None
+    row = customers.loc[mask].iloc[0]
+    promoter = str(row.get("promoted_by", "") or "").strip()
+    if promoter and promoter == str(sm_actor_id or "").strip():
+        return None
 
     return update_kyc_record(customer_id, {
         "SMApprovalStatus": SM_APPROVAL_APPROVED,
@@ -1483,10 +1502,21 @@ def approve_critical_customer(customer_id: str, sm_actor_id: str) -> dict[str, s
 
 def reject_critical_flag(customer_id: str, sm_actor_id: str, reason: str = "") -> dict[str, str] | None:
     """
-    Senior Management rejects the Critical flag.  RiskStatus is stepped back to High
-    so the customer retains Enhanced CDD but no longer requires SM sign-off.
+    MLRO rejects the Critical flag.  RiskStatus is stepped back to High so the
+    customer retains Enhanced CDD but no longer requires MLRO sign-off.
+
+    Also refuses if the rejecter promoted the customer (defensive SoD check).
     """
     from utils.constants import SM_APPROVAL_REJECTED
+
+    customers = get_kyc_customers()
+    mask = customers["id"].astype(str) == str(customer_id)
+    if not mask.any():
+        return None
+    row = customers.loc[mask].iloc[0]
+    promoter = str(row.get("promoted_by", "") or "").strip()
+    if promoter and promoter == str(sm_actor_id or "").strip():
+        return None
 
     return update_kyc_record(customer_id, {
         "RiskStatus": RISK_HIGH,
@@ -1494,7 +1524,8 @@ def reject_critical_flag(customer_id: str, sm_actor_id: str, reason: str = "") -
         "SMApprovalStatus": SM_APPROVAL_REJECTED,
         "SMApprovedBy": sm_actor_id,
         "SMApprovedAt": _utc_now_iso(),
-        "FlaggedReason": reason or "Rejected by SM",
+        "FlaggedReason": reason or "Rejected by MLRO",
+        "promoted_by": "",
     })
 
 

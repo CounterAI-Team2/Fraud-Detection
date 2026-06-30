@@ -26,9 +26,10 @@ from utils.constants import (
     STR_STATUS_L1,
     STR_STATUS_L2,
     STR_STATUSES,
+    display_role,
 )
 from utils.data_store import get_str_cases
-from utils.session_utils import get_current_analyst
+from utils.session_utils import get_current_analyst, is_read_only
 from utils.str_authz import authorize, gate_for_status
 from utils.str_builder import build_default_grounds, build_str_document, make_reference_number
 
@@ -154,7 +155,7 @@ st.markdown(
     f"<div style='border:1px solid #1e2130;border-radius:10px;background:#13161f;"
     f"padding:10px 16px;margin-bottom:14px;font-size:12px;color:#888'>"
     f"<span style='text-transform:uppercase;letter-spacing:1px;color:#555;font-size:11px'>Acting as</span>"
-    f"&nbsp;&nbsp;<b style='color:#4da6ff'>{_actor_role_top}</b> · {_actor_id_top}</div>",
+    f"&nbsp;&nbsp;<b style='color:#4da6ff'>{display_role(_actor_role_top)}</b> · {_actor_id_top}</div>",
     unsafe_allow_html=True,
 )
 
@@ -222,9 +223,12 @@ with tab_workflow:
         _cur_idx = _STAGES.index(current_status) if current_status in _STAGES else 0
 
         _is_locked = current_status in (STR_STATUS_APPROVED, STR_STATUS_ARCHIVED)
+        _read_only = is_read_only(actor_role)
         _action = gate_for_status(current_status)
         if _is_locked:
             _allowed, _auth_level, _auth_msg = False, "lock", "This STR is approved and locked — read-only."
+        elif _read_only:
+            _allowed, _auth_level, _auth_msg = False, "role", "Auditor role is read-only on STR workflow."
         else:
             _allowed, _auth_level, _auth_msg = authorize(_action, actor_id, actor_role, str_record)
 
@@ -456,13 +460,19 @@ with tab_workflow:
                             st.rerun()
 
                 if not _is_locked:
-                    if st.button("Save Draft", use_container_width=True, key="str_save_draft"):
+                    if st.button(
+                        "Save Draft", use_container_width=True, key="str_save_draft",
+                        disabled=_read_only,
+                    ):
                         upsert_str_workflow(str_record, grounds, current_status, _form_updates)
                         st.success("Draft saved.")
                         st.rerun()
 
                     if current_status in (STR_STATUS_L1, STR_STATUS_L2):
-                        if st.button("Return to Drafter", use_container_width=True, key="str_return"):
+                        if st.button(
+                            "Return to Drafter", use_container_width=True, key="str_return",
+                            disabled=_read_only,
+                        ):
                             if not _allowed:
                                 st.error(_auth_msg)
                             elif not return_reason.strip():
@@ -490,14 +500,14 @@ with tab_workflow:
                 _l1_actor = str(str_record.get("l1_reviewer", "") or "")
                 _l2_actor = str(str_record.get("l2_reviewer", "") or "")
                 st.markdown(
-                    _trail_row("Drafted", "#4caf50", "Analyst",
+                    _trail_row("Drafted", "#4caf50", "AML Analyst",
                                str(str_record.get("drafted_by", "") or ""),
                                f"Drafted · {str(str_record.get('created_at', '') or '')[:10]}", "#888")
-                    + _trail_row("L1 Review", "#4da6ff", "Compliance Officer", _l1_actor,
+                    + _trail_row("L1 Review", "#4da6ff", "Senior Investigator", _l1_actor,
                                  (f"{str_record.get('l1_reason', '')} · {str_record.get('l1_reviewed_at', '')}"
                                   if _l1_actor else "Awaiting L1 reviewer"),
                                  "#888" if _l1_actor else "#444")
-                    + _trail_row("L2 Review", "#fb8c00", "Senior Management", _l2_actor,
+                    + _trail_row("L2 Review", "#fb8c00", "MLRO", _l2_actor,
                                  (f"{str_record.get('l2_reason', '')} · {str_record.get('l2_reviewed_at', '')}"
                                   if _l2_actor else "Awaiting L2 reviewer"),
                                  "#888" if _l2_actor else "#444", last=True),
