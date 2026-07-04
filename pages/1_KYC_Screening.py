@@ -921,7 +921,7 @@ _STATUS_META = {
     "ok":           ("#4caf50", "Up to date",  "All sanctions lists synced successfully."),
     "skipped":      ("#4da6ff", "Skipped",     "Lists already up to date — no changes pulled."),
     "partial":      ("#fb8c00", "Partial",     "Some lists synced; others failed. Screening continues against cached names."),
-    "needs_upload": ("#fb8c00", "Needs upload","One or more lists require a manual HTML upload — automatic fetch unavailable."),
+    "needs_upload": ("#fb8c00", "Needs upload","One or more lists require a manual HTML upload because automatic fetch failed."),
     "failed":       ("#f44336", "Sync failed", "All list fetches failed. Screening continues against cached names."),
 }
 _b_color, _b_label, _b_desc = _STATUS_META.get(_sync_status, ("#888", "Unknown", "Sync status could not be determined."))
@@ -947,6 +947,21 @@ with st.container(border=True):
     if _b4.button("Refresh", key="banner_refresh", disabled=not _can_ref_data):
         st.session_state["mas_sync_result"] = sync_mas_sanctions(force=True).to_dict()
         st.rerun()
+    _problem_entries = [
+        e for e in list_catalog_entries()
+        if e.get("status") in {"Needs upload", "Landing cached"}
+        or e.get("needs_manual_upload")
+    ]
+    if _problem_entries:
+        with st.expander(f"{len(_problem_entries)} list(s) need attention"):
+            for _pe in _problem_entries:
+                _pe_label = _pe.get("label") or _pe.get("key", "—")
+                _pe_err = _pe.get("last_error", "")
+                st.markdown(
+                    f"- **{_pe_label}** &nbsp; `{_pe.get('status', '—')}`"
+                    + (f"  \n  <span style='color:#888;font-size:11px'>{_pe_err}</span>" if _pe_err else ""),
+                    unsafe_allow_html=True,
+                )
 
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
