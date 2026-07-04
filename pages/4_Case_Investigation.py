@@ -5,6 +5,8 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
+st.set_page_config(layout="wide")
+
 from utils.sidebar import render_sidebar
 from utils.aml_services import (
     attach_case_files,

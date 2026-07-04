@@ -3,6 +3,8 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+st.set_page_config(layout="wide")
+
 from utils.sidebar import render_sidebar
 from utils.aml_services import build_dashboard_metrics, ensure_scored_defaults
 from utils.audit_logger import log_action

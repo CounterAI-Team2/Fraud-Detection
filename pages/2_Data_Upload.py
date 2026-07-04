@@ -5,6 +5,8 @@ import time
 import pandas as pd
 import streamlit as st
 
+st.set_page_config(layout="wide")
+
 from utils.audit_logger import log_action
 from utils.aml_services import ensure_scored_defaults, sync_customer_profiles
 from utils.constants import ALERT_STATUS_NEW, DATA_PREVIEW_LIMIT

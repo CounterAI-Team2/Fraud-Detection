@@ -4,6 +4,8 @@ from datetime import date
 
 import streamlit as st
 
+st.set_page_config(layout="wide")
+
 from utils.sidebar import render_sidebar
 from utils.audit_logger import log_action
 from utils.session_utils import get_current_analyst

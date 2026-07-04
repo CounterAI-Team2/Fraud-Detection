@@ -5,6 +5,8 @@ import html as _html
 import pandas as pd
 import streamlit as st
 
+st.set_page_config(layout="wide")
+
 from utils.aml_services import build_governance_datasets
 from utils.data_store import get_audit_events
 from utils.sidebar import render_sidebar

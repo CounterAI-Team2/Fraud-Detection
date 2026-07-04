@@ -5,6 +5,8 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+st.set_page_config(layout="wide")
+
 from utils.audit_logger import log_action
 from utils.sidebar import render_sidebar
 from utils.constants import (

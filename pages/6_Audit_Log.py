@@ -6,6 +6,8 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
+st.set_page_config(layout="wide")
+
 from utils.audit_logger import read_audit_events
 from utils.session_utils import get_current_analyst
 from utils.sidebar import render_sidebar
