@@ -9,6 +9,7 @@ from utils.sidebar import render_sidebar
 from utils.aml_services import build_dashboard_metrics, ensure_scored_defaults
 from utils.audit_logger import log_action
 from utils.constants import (
+    CRITICAL_APPROVE_ROLES,
     RISK_TIER_COLORS,
     SM_APPROVAL_PENDING,
     STR_STATUS_APPROVED,
@@ -25,7 +26,7 @@ from utils.kyc_store import (
     get_kyc_customers,
     reject_critical_flag,
 )
-from utils.session_utils import get_current_analyst
+from utils.session_utils import can_act, get_current_analyst, gates_bypassed
 
 render_sidebar()
 
@@ -156,47 +157,62 @@ with _tab_overview:
     # --- Critical Customer Approval Queue ---
     with st.container(border=True):
         st.markdown("**Critical Customer Approval Queue**")
+        st.caption("MLRO sign-off required. Approver must differ from the user who promoted the customer to Critical.")
         st.divider()
         if pending_critical.empty:
-            st.success("No Critical customers pending Senior Management approval.")
+            st.success("No Critical customers pending MLRO approval.")
         else:
-            can_approve = actor_role in {"Senior Management", "Admin"}
+            _has_role = can_act(actor_role, CRITICAL_APPROVE_ROLES)
             h1, h2, h3, h4, h5 = st.columns([2, 2, 1.5, 2, 2])
             for col, lbl in zip([h1, h2, h3, h4, h5], ["CUSTOMER", "ACCOUNT", "CDD LEVEL", "FLAGGED REASON", "ACTIONS"]):
                 col.markdown(f"<span style='color:#aaa;font-size:11px;font-weight:bold;letter-spacing:1px'>{lbl}</span>", unsafe_allow_html=True)
             st.divider()
             for _, crit_row in pending_critical.iterrows():
                 cid = str(crit_row["id"])
+                promoter = str(crit_row.get("promoted_by", "") or "").strip()
+                _sod_ok = gates_bypassed() or not promoter or promoter != str(actor_id)
+                _can_act_row = _has_role and _sod_ok
                 r1, r2, r3, r4, r5 = st.columns([2, 2, 1.5, 2, 2])
                 r1.markdown(str(crit_row["FullName"]))
                 r2.markdown(f"`{crit_row['AccountNo']}`")
                 r3.markdown(str(crit_row.get("CDDLevel", "—")))
-                r4.markdown(str(crit_row.get("FlaggedReason", "—") or "—"))
-                if can_approve:
+                _flag_text = str(crit_row.get("FlaggedReason", "—") or "—")
+                if promoter:
+                    _flag_text += f"<br><span style='color:#666;font-size:11px'>Promoted by {promoter}</span>"
+                r4.markdown(_flag_text, unsafe_allow_html=True)
+                if _can_act_row:
                     if r5.button("Approve", key=f"approve_{cid}", type="primary", use_container_width=True):
-                        approve_critical_customer(cid, actor_id)
-                        log_action(
-                            action="critical_customer_approved",
-                            details=f"customer_id={cid}; approved_by={actor_id}",
-                            analyst_id=actor_id, module="management_dashboard",
-                            event_type="critical_customer_approved", entity_type="customer",
-                            entity_id=cid, actor_role=actor_role,
-                            payload={"customer_id": cid, "approved_by": actor_id},
-                        )
-                        st.rerun()
+                        _result = approve_critical_customer(cid, actor_id)
+                        if _result is None:
+                            st.error("Approval blocked by segregation of duties.")
+                        else:
+                            log_action(
+                                action="critical_customer_approved",
+                                details=f"customer_id={cid}; approved_by={actor_id}; promoted_by={promoter}",
+                                analyst_id=actor_id, module="management_dashboard",
+                                event_type="critical_customer_approved", entity_type="customer",
+                                entity_id=cid, actor_role=actor_role,
+                                payload={"customer_id": cid, "approved_by": actor_id, "promoted_by": promoter},
+                            )
+                            st.rerun()
                     if r5.button("Reject", key=f"reject_{cid}", use_container_width=True):
-                        reject_critical_flag(cid, actor_id)
-                        log_action(
-                            action="critical_customer_rejected",
-                            details=f"customer_id={cid}; rejected_by={actor_id}; demoted to High",
-                            analyst_id=actor_id, module="management_dashboard",
-                            event_type="critical_customer_rejected", entity_type="customer",
-                            entity_id=cid, actor_role=actor_role,
-                            payload={"customer_id": cid, "rejected_by": actor_id, "new_risk": RISK_HIGH},
-                        )
-                        st.rerun()
+                        _result = reject_critical_flag(cid, actor_id)
+                        if _result is None:
+                            st.error("Rejection blocked by segregation of duties.")
+                        else:
+                            log_action(
+                                action="critical_customer_rejected",
+                                details=f"customer_id={cid}; rejected_by={actor_id}; demoted to High",
+                                analyst_id=actor_id, module="management_dashboard",
+                                event_type="critical_customer_rejected", entity_type="customer",
+                                entity_id=cid, actor_role=actor_role,
+                                payload={"customer_id": cid, "rejected_by": actor_id, "new_risk": RISK_HIGH, "promoted_by": promoter},
+                            )
+                            st.rerun()
+                elif not _has_role:
+                    r5.caption("Requires MLRO role.")
                 else:
-                    r5.caption("Requires SM / Admin role.")
+                    r5.caption("Segregation of duties: you promoted this customer to Critical and cannot also approve it.")
 
 # ── Tab 2: Trends ─────────────────────────────────────────────────────────────
 with _tab_trends:

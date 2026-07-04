@@ -19,6 +19,7 @@ from utils.aml_services import (
 from utils.audit_logger import log_action
 from utils.constants import (
     ALERT_STATUS_DISMISSED,
+    CASE_ACTION_ROLES,
     CASE_STATUSES,
     CASE_STATUS_ESCALATED,
     CASE_STATUS_IN_REVIEW,
@@ -28,6 +29,7 @@ from utils.constants import (
     CDD_LEVEL_SIMPLIFIED,
     CDD_LEVELS,
     RISK_TIER_COLORS,
+    display_role,
 )
 from utils.cdd_rules import recommend_for_case
 from utils.data_store import get_customers, upsert_customers
@@ -44,7 +46,7 @@ from utils.kyc_store import (
     update_kyc_record,
 )
 from utils.model_loader import load_models
-from utils.session_utils import get_current_analyst, require_scored_df
+from utils.session_utils import can_act, get_current_analyst, is_read_only, require_scored_df
 from utils.shap_explainer import FEATURE_DESCRIPTIONS, get_model_xai_explanation
 
 render_sidebar()
@@ -75,6 +77,13 @@ if rows.empty:
 
 selected_txn  = rows.iloc[0]
 analyst_id, actor_role = get_current_analyst()
+_can_action_case = can_act(actor_role, CASE_ACTION_ROLES)
+_read_only = is_read_only(actor_role)
+if not _can_action_case:
+    st.info(
+        f"Your role ({display_role(actor_role)}) can view the case but cannot update its status, "
+        "file an STR, or close/resolve it. Action buttons are disabled."
+    )
 case_record   = ensure_case_for_transaction(selected_txn, analyst_id)
 existing_case = get_case_by_transaction(str(selected_txn["transaction_id"])) or case_record
 st.session_state["selected_case_id"] = existing_case["case_id"]
@@ -372,7 +381,10 @@ with st.container(border=True):
         "Attachments (comma-separated)", value=existing_case.get("attachment_names", ""),
     )
 
-    if st.button("File STR", type="primary", use_container_width=True):
+    if st.button(
+        "File STR", type="primary", use_container_width=True,
+        disabled=not _can_action_case,
+    ):
         if not notes.strip():
             st.error("Investigation notes are required before filing an STR.")
         else:
@@ -420,12 +432,18 @@ with st.container(border=True):
             st.switch_page("pages/5_STR_Generation.py")
 
     if cdd_level == CDD_LEVEL_ENHANCED:
-        if st.button("Open ECDD Review", use_container_width=True):
+        if st.button(
+            "Open ECDD Review", use_container_width=True,
+            disabled=not _can_action_case,
+        ):
             st.session_state["cdd_customer_id"] = str(selected_txn["customer_id"])
             st.session_state["cdd_mode"] = "ECDD"
             st.switch_page("pages/9_CDD_Review.py")
 
-    if st.button("Close Case", use_container_width=True):
+    if st.button(
+        "Close Case", use_container_width=True,
+        disabled=not _can_action_case,
+    ):
         updated_case = update_case_record(
             existing_case["case_id"],
             {
@@ -456,7 +474,10 @@ with st.container(border=True):
         )
         st.success("Case closed.")
 
-    if st.button("Resolve — No STR Required", use_container_width=True):
+    if st.button(
+        "Resolve — No STR Required", use_container_width=True,
+        disabled=not _can_action_case,
+    ):
         if not outcome_reason.strip():
             st.error("Please provide a resolution reason.")
         else:

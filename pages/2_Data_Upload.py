@@ -9,7 +9,12 @@ st.set_page_config(layout="wide")
 
 from utils.audit_logger import log_action
 from utils.aml_services import ensure_scored_defaults, sync_customer_profiles
-from utils.constants import ALERT_STATUS_NEW, DATA_PREVIEW_LIMIT
+from utils.constants import (
+    ALERT_STATUS_NEW,
+    DATA_PREVIEW_LIMIT,
+    DATA_UPLOAD_SCORE_ROLES,
+    display_role,
+)
 from utils.data_store import get_model_registry
 from utils.feature_engineering import (
     CATEGORICAL_FEATURES,
@@ -23,7 +28,7 @@ from utils.feature_engineering import (
 )
 from utils.kyc_store import apply_cdd_escalation_from_transactions
 from utils.model_loader import load_models
-from utils.session_utils import get_current_analyst
+from utils.session_utils import can_act, get_current_analyst, is_read_only
 from utils.sidebar import render_sidebar
 
 render_sidebar()
@@ -31,13 +36,25 @@ render_sidebar()
 st.title("Transaction Data Upload")
 st.caption("Upload SAML-D transaction data, score AML risk, and prepare alerts for investigation.")
 
+_actor_id_top, _actor_role_top = get_current_analyst()
+_can_score = can_act(_actor_role_top, DATA_UPLOAD_SCORE_ROLES)
+_read_only = is_read_only(_actor_role_top)
+if not _can_score:
+    st.info(
+        f"Your role ({display_role(_actor_role_top)}) has view-only access to this page. "
+        "Upload and scoring controls are disabled."
+    )
+
 _feat_display = st.session_state.get("scored_df")
 _meta = st.session_state.get("_scoring_meta", {})
 
 with st.container(border=True):
     st.markdown("**Upload Transaction Dataset**")
     st.caption("SAML-D format CSV. Schema is validated before scoring begins.")
-    _uploaded = st.file_uploader("Transaction CSV", type=["csv"], label_visibility="collapsed")
+    _uploaded = st.file_uploader(
+        "Transaction CSV", type=["csv"], label_visibility="collapsed",
+        disabled=not _can_score,
+    )
     if _uploaded is not None:
         _size_mb = getattr(_uploaded, "size", 0) / (1024 * 1024)
         st.success(f"Ready: `{_uploaded.name}` ({_size_mb:.2f} MB)")
@@ -51,13 +68,19 @@ with st.container(border=True):
 
     st.markdown("**Scoring Options**")
     _oc1, _oc2 = st.columns(2)
-    _cap_rows = _oc1.number_input("Row cap", min_value=1000, max_value=200_000, value=50_000, step=1000)
-    _threshold = _oc2.slider("Risk threshold", min_value=0.05, max_value=0.95, value=0.50, step=0.05)
+    _cap_rows = _oc1.number_input(
+        "Row cap", min_value=1000, max_value=200_000, value=50_000, step=1000,
+        disabled=not _can_score,
+    )
+    _threshold = _oc2.slider(
+        "Risk threshold", min_value=0.05, max_value=0.95, value=0.50, step=0.05,
+        disabled=not _can_score,
+    )
     _score_btn = st.button(
         "Score Dataset",
         type="primary",
         use_container_width=True,
-        disabled=_uploaded is None,
+        disabled=_uploaded is None or not _can_score,
     )
     if _feat_display is not None:
         st.caption(

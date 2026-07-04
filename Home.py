@@ -2,7 +2,16 @@ from __future__ import annotations
 
 import streamlit as st
 
-from utils.constants import ALERT_STATUS_NEW, CASE_OPEN_STATUSES, DEFAULT_ACTOR_ID, DEFAULT_ACTOR_ROLE, STR_STATUS_DRAFT, STR_STATUS_L1, STR_STATUS_L2
+from utils.constants import (
+    ALERT_STATUS_NEW,
+    CASE_OPEN_STATUSES,
+    DEFAULT_ACTOR_ID,
+    DEFAULT_ACTOR_ROLE,
+    STR_STATUS_DRAFT,
+    STR_STATUS_L1,
+    STR_STATUS_L2,
+    display_role,
+)
 from utils.data_store import ensure_reference_data, get_cases, get_str_cases
 from utils.kyc_store import ensure_kyc_database, get_kyc_customers
 from utils.mas_sanctions_sync import sync_mas_sanctions
@@ -57,8 +66,8 @@ render_sidebar()
 
 _threshold = float(_scored["risk_threshold"].iloc[0]) if _scored is not None else None
 _threshold_display = str(_threshold) if _threshold is not None else "—"
-_actor_id = st.session_state.get("current_actor_id", "Analyst")
-_actor_role = st.session_state.get("current_actor_role", "Admin")
+_actor_id = st.session_state.get("current_actor_id", DEFAULT_ACTOR_ID)
+_actor_role = st.session_state.get("current_actor_role", DEFAULT_ACTOR_ROLE)
 _models = " · ".join(p.stem for p in [RF_PATH, CART_PATH, LOGIT_PATH] if p.exists())
 
 with st.container(border=True):
@@ -66,7 +75,7 @@ with st.container(border=True):
     _sc1.markdown("🟢 System Online")
     _sc2.markdown(f"Models: **{_models}**")
     _sc3.markdown(f"Threshold:  \n**{_threshold_display}**")
-    _sc4.markdown(f"Session:  \n**{_actor_id} / {_actor_role}**")
+    _sc4.markdown(f"Session:  \n**{_actor_id} / {display_role(_actor_role)}**")
 
 def _card(label: str, value: int, color: str, delta: int) -> str:
     arrow = f"▲ {delta}" if delta > 0 else (f"▼ {abs(delta)}" if delta < 0 else "—")

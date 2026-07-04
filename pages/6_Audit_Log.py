@@ -9,6 +9,7 @@ import streamlit as st
 st.set_page_config(layout="wide")
 
 from utils.audit_logger import read_audit_events
+from utils.constants import AUDIT_SEE_ALL_ROLES, display_role
 from utils.session_utils import get_current_analyst
 from utils.sidebar import render_sidebar
 
@@ -18,6 +19,7 @@ st.title("Audit Log")
 st.caption("Full compliance trail and activity history for all system actions.")
 
 current_actor, actor_role = get_current_analyst()
+_see_all = actor_role in AUDIT_SEE_ALL_ROLES
 
 # ── Load data ─────────────────────────────────────────────────────────────────
 events = pd.DataFrame(read_audit_events())
@@ -114,13 +116,14 @@ tab_trail, tab_summary = st.tabs(["Compliance Audit Trail", "Activity Summary"])
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_trail:
 
-    # Admin / non-admin notice
-    if actor_role == "Admin":
+    # See-all roles (MLRO, Auditor, System Administrator) see every actor's events;
+    # others only see their own.
+    if _see_all:
         st.markdown(
-            "<div style='display:inline-flex;align-items:center;gap:6px;padding:6px 12px;"
-            "background:rgba(77,166,255,0.07);border:1px solid rgba(77,166,255,0.2);"
-            "border-radius:6px;font-size:12px;color:#4da6ff;margin-bottom:14px'>"
-            "● Admin view — showing all users' events.</div>",
+            f"<div style='display:inline-flex;align-items:center;gap:6px;padding:6px 12px;"
+            f"background:rgba(77,166,255,0.07);border:1px solid rgba(77,166,255,0.2);"
+            f"border-radius:6px;font-size:12px;color:#4da6ff;margin-bottom:14px'>"
+            f"● {_html.escape(display_role(actor_role))} view — showing all users' events.</div>",
             unsafe_allow_html=True,
         )
     else:
@@ -137,7 +140,7 @@ with tab_trail:
     else:
         # Role filter applied upfront
         view = events.copy()
-        if actor_role != "Admin":
+        if not _see_all:
             view = view[view["actor_id"].astype(str) == current_actor]
 
         # ── Filters ──────────────────────────────────────────────────────────
@@ -159,7 +162,7 @@ with tab_trail:
         _sel_usr = _fc4.selectbox(
             "User",
             ["All"] + _user_opts,
-            disabled=(actor_role != "Admin"),
+            disabled=not _see_all,
             key="aud_user",
         )
         _min_d = view["timestamp_utc"].min()
@@ -178,7 +181,7 @@ with tab_trail:
             view = view[view["module"] == _sel_mod]
         if _sel_evt != "All":
             view = view[view["event_type"] == _sel_evt]
-        if _sel_usr != "All" and actor_role == "Admin":
+        if _sel_usr != "All" and _see_all:
             view = view[view["actor_id"] == _sel_usr]
         if _search.strip():
             _needle = _search.strip().lower()
@@ -233,7 +236,8 @@ with tab_trail:
             _entity    = _html.escape(str(_row.get("entity_id", "—") or "—"))
             _txn       = _html.escape(str(_row.get("transaction_id", "—") or "—"))
             _user      = _html.escape(str(_row.get("actor_id", "—") or "—"))
-            _role      = _html.escape(str(_row.get("actor_role", "—") or "—"))
+            _role_raw  = str(_row.get("actor_role", "—") or "—")
+            _role      = _html.escape(display_role(_role_raw) if _role_raw != "—" else _role_raw)
             _ki        = _html.escape(_key_info(_row.get("payload", {})))
 
             _badge_html = (
@@ -358,7 +362,8 @@ with tab_summary:
                     _user_html = ""
                     for _, _urow in _user_counts.iterrows():
                         _uid   = _html.escape(str(_urow.get("actor_id", "—")))
-                        _urole = _html.escape(str(_urow.get("actor_role", "—")))
+                        _urole_raw = str(_urow.get("actor_role", "—"))
+                        _urole = _html.escape(display_role(_urole_raw) if _urole_raw != "—" else _urole_raw)
                         _ucnt  = int(_urow["count"])
                         _border = "border-bottom:1px solid #1e2130"
                         _user_html += (

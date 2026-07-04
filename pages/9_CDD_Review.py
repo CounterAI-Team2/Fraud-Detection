@@ -32,20 +32,23 @@ from utils.cdd_review import (
     SCDD_REVIEW_CYCLES,
     SOF_CATEGORIES,
     can_approve,
-    can_submit_for_approval,
+    can_complete_ecdd,
     check_scdd_eligibility,
     get_latest_review,
     load_payload,
     save_review,
     sync_review_to_kyc,
 )
+from utils.constants import display_role
+from utils.session_utils import is_read_only
 
 render_sidebar()
 
 st.title("Customer Due Diligence")
-st.caption("Document SCDD / ECDD per MAS Notice 626 — Compliance Officer workspace.")
+st.caption("Document SCDD / ECDD per MAS Notice 626 — AML 2nd-line maker workspace, MLRO approver.")
 
 actor_id, actor_role = get_current_analyst()
+_read_only = is_read_only(actor_role)
 
 
 def _safe_idx(options: list, value, default: int = 0) -> int:
@@ -71,7 +74,7 @@ st.markdown(
     f"<div style='border:1px solid #1e2130;border-radius:10px;background:#13161f;padding:10px 16px;"
     f"margin-bottom:12px;font-size:12px;color:#888'><span style='text-transform:uppercase;"
     f"letter-spacing:1px;color:#555;font-size:11px'>Acting as</span>&nbsp;&nbsp;"
-    f"<b style='color:#4da6ff'>{actor_role}</b> · {actor_id}</div>",
+    f"<b style='color:#4da6ff'>{display_role(actor_role)}</b> · {actor_id}</div>",
     unsafe_allow_html=True,
 )
 
@@ -223,14 +226,20 @@ if cdd_type == CDD_TYPE_SCDD:
                             completed_by=actor_id, next_review_date=str(next_review))
 
         b1, b2 = st.columns([1, 1])
-        if b1.button("Save Draft", use_container_width=True, key="scdd_save"):
+        if b1.button(
+            "Save Draft", use_container_width=True, key="scdd_save",
+            disabled=_read_only,
+        ):
             rec = save_review(_base_meta(CDD_STATUS_DRAFT, **_meta_common), _payload)
             log_action(action="scdd_draft_saved", transaction_id=str(selected_id),
                        details=f"review_id={rec['review_id']}", analyst_id=actor_id, module="cdd_review",
                        event_type="scdd_draft_saved", entity_type="cdd", entity_id=rec["review_id"], actor_role=actor_role)
             st.success("SCDD draft saved.")
             st.rerun()
-        if b2.button("Complete SCDD", type="primary", use_container_width=True, disabled=not eligible, key="scdd_complete"):
+        if b2.button(
+            "Complete SCDD", type="primary", use_container_width=True,
+            disabled=not eligible or _read_only, key="scdd_complete",
+        ):
             if not (a1 and a2 and a3 and a4):
                 st.error("All eligibility attestations must be checked before completing.")
             elif not risk_rationale.strip() or not measures:
@@ -253,11 +262,14 @@ if cdd_type == CDD_TYPE_SCDD:
 # ══════════════════════════════════════════════════════════════════════════════
 else:
     _locked = _status == CDD_STATUS_APPROVED
-    _can_submit = can_submit_for_approval(actor_role)
+    _can_complete = can_complete_ecdd(actor_role) and not _read_only
     _approve_ok, _approve_msg = can_approve(actor_role, actor_id, existing or {})
+    if _read_only:
+        _approve_ok = False
+        _approve_msg = "Auditor role is read-only."
 
     _banner("info", "ECDD: customer is on <b>Enhanced</b> due diligence. Starred fields are mandatory and "
-                    "Senior Management approval is required before the relationship may proceed.")
+                    "MLRO approval is required before the relationship may proceed.")
 
     _basis_opts = [b for b in ECDD_BASIS if is_corp or b not in ECDD_CORP_ONLY_BASIS]
     with st.container(border=True):
@@ -336,14 +348,14 @@ else:
         triggers = st.multiselect("Trigger events for re-review", ECDD_TRIGGERS,
                                  default=[t for t in pl.get("triggers", []) if t in ECDD_TRIGGERS], disabled=_locked, key="ecdd_triggers")
 
-    # ── Senior Management approval ────────────────────────────────────────────
+    # ── MLRO approval ─────────────────────────────────────────────────────────
     _sm_status = str(existing.get("sm_status", "")) if existing else ""
     with st.container(border=True):
         _pill = {"Pending": ("#fdd835", "Pending"), "Approved": ("#4caf50", "Approved"),
                  "Rejected": ("#f44336", "Rejected")}.get(_sm_status, ("#888", "Not submitted"))
         st.markdown(
             f"<div style='display:flex;justify-content:space-between;align-items:center'>"
-            f"<span style='font-size:15px;font-weight:700'>Senior Management Approval "
+            f"<span style='font-size:15px;font-weight:700'>MLRO Approval "
             f"<span style='color:#f44336'>*</span></span>"
             f"<span style='padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;"
             f"background:{_pill[0]}22;color:{_pill[0]}'>● {_pill[1]}</span></div>",
@@ -351,7 +363,7 @@ else:
         )
         if _status == CDD_STATUS_PENDING:
             if _approve_ok:
-                _banner("ok", "You are <b>Senior Management</b> — you may approve or reject this higher-risk relationship.")
+                _banner("ok", "You are the <b>MLRO</b> — you may approve or reject this higher-risk relationship.")
             else:
                 _banner("warn", _approve_msg)
         elif _sm_status == "Approved":
@@ -359,8 +371,8 @@ else:
         elif _sm_status == "Rejected":
             _banner("deny", f"Rejected by {existing.get('sm_approver','')} on {existing.get('sm_decision_at','')}.")
         else:
-            _banner("warn", "Not yet submitted. Compliance Officer must submit for Senior Management approval.")
-        sm_remarks = st.text_area("Senior Management remarks", value=pl.get("sm_remarks", ""),
+            _banner("warn", "Not yet completed. An AML Analyst or Senior Investigator must complete the ECDD before MLRO approval.")
+        sm_remarks = st.text_area("MLRO remarks", value=pl.get("sm_remarks", ""),
                                   disabled=not (_status == CDD_STATUS_PENDING and _approve_ok), key="ecdd_sm_remarks")
 
     def _ecdd_payload() -> dict:
@@ -384,14 +396,17 @@ else:
     with st.container(border=True):
         st.markdown("**Sign-off**")
         c1, c2 = st.columns(2)
-        c1.text_input("Completed by (Compliance Officer)", value=actor_id, disabled=True, key="ecdd_by")
+        c1.text_input("Completed by (AML 2nd-line maker)", value=actor_id, disabled=True, key="ecdd_by")
         next_review = c2.date_input("Next review date", value=date.today().replace(year=date.today().year + 1), key="ecdd_next")
 
         _meta_common = dict(risk_rating="High", completed_by=existing.get("completed_by", "") if existing else "",
                             next_review_date=str(next_review))
 
         b1, b2, b3, b4 = st.columns(4)
-        if b1.button("Save Draft", use_container_width=True, disabled=_locked, key="ecdd_save"):
+        if b1.button(
+            "Save Draft", use_container_width=True,
+            disabled=_locked or _read_only, key="ecdd_save",
+        ):
             rec = save_review(_base_meta(_status or CDD_STATUS_DRAFT, sm_status=_sm_status, **_meta_common), _ecdd_payload())
             log_action(action="ecdd_draft_saved", transaction_id=str(selected_id), details=f"review_id={rec['review_id']}",
                        analyst_id=actor_id, module="cdd_review", event_type="ecdd_draft_saved", entity_type="cdd",
@@ -399,10 +414,12 @@ else:
             st.success("ECDD draft saved.")
             st.rerun()
 
-        if b2.button("Submit for SM Approval", use_container_width=True,
-                     disabled=_locked or not _can_submit or _status == CDD_STATUS_PENDING, key="ecdd_submit"):
-            if not _can_submit:
-                st.error("Only a Compliance Officer can submit for approval.")
+        if b2.button(
+            "Complete ECDD", use_container_width=True,
+            disabled=_locked or not _can_complete or _status == CDD_STATUS_PENDING, key="ecdd_complete",
+        ):
+            if not _can_complete:
+                st.error("Only an AML Analyst or Senior Investigator can complete an ECDD.")
             elif not (basis and source_of_wealth.strip() and source_of_funds.strip() and evidence_types):
                 st.error("Basis, Source of Wealth, Source of Funds, and at least one evidence type are required.")
             else:
@@ -411,14 +428,16 @@ else:
                                   risk_rating="High", next_review_date=str(next_review))
                 rec = save_review(meta, _ecdd_payload())
                 sync_review_to_kyc(selected_id, CDD_TYPE_ECDD, _ecdd_payload(), sm_status="Pending")
-                log_action(action="ecdd_submitted", transaction_id=str(selected_id), details=f"review_id={rec['review_id']}",
-                           analyst_id=actor_id, module="cdd_review", event_type="ecdd_submitted", entity_type="cdd",
+                log_action(action="ecdd_completed", transaction_id=str(selected_id), details=f"review_id={rec['review_id']}",
+                           analyst_id=actor_id, module="cdd_review", event_type="ecdd_completed", entity_type="cdd",
                            entity_id=rec["review_id"], actor_role=actor_role, payload={"status": CDD_STATUS_PENDING})
-                st.success("ECDD submitted for Senior Management approval.")
+                st.success("ECDD completed — awaiting MLRO approval.")
                 st.rerun()
 
-        if b3.button("Approve (SM)", type="primary", use_container_width=True,
-                     disabled=not (_status == CDD_STATUS_PENDING and _approve_ok), key="ecdd_approve"):
+        if b3.button(
+            "Approve (MLRO)", type="primary", use_container_width=True,
+            disabled=not (_status == CDD_STATUS_PENDING and _approve_ok), key="ecdd_approve",
+        ):
             today = date.today().isoformat()
             pay = _ecdd_payload()
             pay["sm_approver"] = actor_id
@@ -432,11 +451,13 @@ else:
             log_action(action="ecdd_approved", transaction_id=str(selected_id), details=f"review_id={rec['review_id']}",
                        analyst_id=actor_id, module="cdd_review", event_type="ecdd_approved", entity_type="cdd",
                        entity_id=rec["review_id"], actor_role=actor_role, payload={"status": CDD_STATUS_APPROVED})
-            st.success("ECDD approved by Senior Management.")
+            st.success("ECDD approved by MLRO.")
             st.rerun()
 
-        if b4.button("Reject (SM)", use_container_width=True,
-                     disabled=not (_status == CDD_STATUS_PENDING and _approve_ok), key="ecdd_reject"):
+        if b4.button(
+            "Reject (MLRO)", use_container_width=True,
+            disabled=not (_status == CDD_STATUS_PENDING and _approve_ok), key="ecdd_reject",
+        ):
             today = date.today().isoformat()
             pay = _ecdd_payload()
             pay["sm_approver"] = actor_id
@@ -448,5 +469,5 @@ else:
             log_action(action="ecdd_rejected", transaction_id=str(selected_id), details=f"review_id={rec['review_id']}",
                        analyst_id=actor_id, module="cdd_review", event_type="ecdd_rejected", entity_type="cdd",
                        entity_id=rec["review_id"], actor_role=actor_role, payload={"status": CDD_STATUS_REJECTED})
-            st.warning("ECDD rejected — returned to Compliance Officer.")
+            st.warning("ECDD rejected — returned to AML 2nd-line maker.")
             st.rerun()

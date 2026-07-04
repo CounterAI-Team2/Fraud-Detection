@@ -3,8 +3,9 @@
 - Eligibility backend-check for SCDD (MAS 626: simplified measures are not permitted
   where there is a FATF call-for-countermeasures nexus, an existing ML/TF suspicion,
   or a PEP).
-- Senior-Management approval gate for ECDD (Compliance Officer submits, Senior
-  Management approves — same role model as the STR L1/L2 flow).
+- MLRO approval gate for ECDD: an AML Analyst or Senior Investigator *completes*
+  the ECDD (single maker step). The MLRO is the sole approver/rejecter and is
+  blocked by segregation of duties from approving an ECDD they completed.
 - Persistence to the cdd_reviews store and sync-back to the KYC customer record.
 """
 
@@ -17,7 +18,11 @@ from utils.constants import (
     CASE_OPEN_STATUSES,
     CDD_LEVEL_ENHANCED,
     CDD_LEVEL_SIMPLIFIED,
+    ROLE_AML_ANALYST,
+    ROLE_MLRO,
+    ROLE_SENIOR_INVESTIGATOR,
 )
+from utils.session_utils import gates_bypassed
 from utils.data_store import (
     get_cases,
     get_cdd_reviews,
@@ -77,9 +82,9 @@ ECDD_REVIEW_CYCLES = ["12 months", "6 months", "3 months"]
 PRETXN_CHECK_OPTIONS = ["Required above threshold", "Required for all", "Not required"]
 ECDD_TRIGGERS = ["Unusual transaction pattern", "Change in PEP status", "New adverse media", "Cross-border spike"]
 
-# Roles permitted to act on the ECDD Senior-Management gate.
-_SUBMIT_ROLES = {"Compliance Officer", "Admin"}
-_APPROVE_ROLES = {"Senior Management", "Admin"}
+# Roles permitted to act on the ECDD MLRO gate.
+_COMPLETE_ROLES = {ROLE_AML_ANALYST, ROLE_SENIOR_INVESTIGATOR}  # maker
+_APPROVE_ROLES  = {ROLE_MLRO}                                   # checker
 
 
 def _is_pep(kyc: dict) -> bool:
@@ -116,14 +121,23 @@ def check_scdd_eligibility(customer_id: str, kyc: dict) -> tuple[bool, list[str]
     return (len(reasons) == 0, reasons)
 
 
+def can_complete_ecdd(role: str) -> bool:
+    """Maker gate: AML Analyst or Senior Investigator may complete an ECDD."""
+    return gates_bypassed() or role in _COMPLETE_ROLES
+
+
+# Legacy alias — kept temporarily so any import that hasn't been migrated
+# still resolves. Prefer ``can_complete_ecdd`` in new code.
 def can_submit_for_approval(role: str) -> bool:
-    return role in _SUBMIT_ROLES
+    return can_complete_ecdd(role)
 
 
 def can_approve(role: str, actor_id: str, review: dict) -> tuple[bool, str]:
-    """Senior-Management gate. Returns (allowed, reason_if_blocked)."""
+    """MLRO approval gate. Returns (allowed, reason_if_blocked)."""
+    if gates_bypassed():
+        return True, ""
     if role not in _APPROVE_ROLES:
-        return False, "Approve / Reject requires the Senior Management role."
+        return False, "Approve / Reject requires the MLRO role."
     if str(actor_id) and str(actor_id) == str(review.get("completed_by", "")):
         return False, "Segregation of duties: you completed this ECDD and cannot also approve it."
     return True, ""

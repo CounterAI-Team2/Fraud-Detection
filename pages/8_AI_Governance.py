@@ -8,13 +8,25 @@ import streamlit as st
 st.set_page_config(layout="wide")
 
 from utils.aml_services import build_governance_datasets
+from utils.audit_logger import log_action
+from utils.constants import (
+    ALERT_THRESHOLDS,
+    GOVERNANCE_CONFIG_ROLES,
+    GOVERNANCE_SIGNOFF_ROLES,
+    display_role,
+)
 from utils.data_store import get_audit_events
+from utils.session_utils import can_act, get_current_analyst
 from utils.sidebar import render_sidebar
 
 render_sidebar()
 
 st.title("AI Governance")
 st.caption("Drift monitoring, analyst override tracking, and model performance.")
+
+_gov_actor_id, _gov_actor_role = get_current_analyst()
+_can_signoff = can_act(_gov_actor_role, GOVERNANCE_SIGNOFF_ROLES)
+_can_config  = can_act(_gov_actor_role, GOVERNANCE_CONFIG_ROLES)
 
 # ── Load data ─────────────────────────────────────────────────────────────────
 datasets = build_governance_datasets()
@@ -527,3 +539,61 @@ with tab_model:
                     file_name="governance_evidence.csv",
                     mime="text/csv",
                 )
+
+        # ── MLRO governance sign-off ───────────────────────────────────────────
+        with st.container(border=True):
+            st.markdown("**Governance Sign-off**")
+            st.markdown(
+                "<div style='font-size:13px;color:#666;margin-bottom:10px'>"
+                "MLRO acknowledgment of the current model and its governance posture. "
+                "Sign-offs are recorded in the audit log."
+                "</div>",
+                unsafe_allow_html=True,
+            )
+            if not _can_signoff:
+                st.caption(
+                    f"Governance sign-off requires the MLRO role. Current role: {display_role(_gov_actor_role)}."
+                )
+            if st.button(
+                "Acknowledge & sign off model governance",
+                type="primary",
+                disabled=not _can_signoff,
+                key="governance_signoff_btn",
+            ):
+                log_action(
+                    action="governance_signoff",
+                    details=f"model={_model_version}; signed_by={_gov_actor_id}",
+                    analyst_id=_gov_actor_id,
+                    module="ai_governance",
+                    event_type="governance_signoff",
+                    entity_type="model",
+                    entity_id=str(_model_version),
+                    actor_role=_gov_actor_role,
+                    payload={"model_version": _model_version, "drift_alerts": _drift_count},
+                )
+                st.success("Governance sign-off recorded.")
+
+        # ── SysAdmin threshold & model config (read-only display) ──────────────
+        with st.container(border=True):
+            st.markdown("**Threshold & Model Configuration**")
+            if not _can_config:
+                st.caption(
+                    f"Configuration is managed by System Administrator. "
+                    f"Current role: {display_role(_gov_actor_role)} — view-only."
+                )
+            else:
+                st.caption("System Administrator view — values are sourced from utils/constants.py.")
+            _tc1, _tc2, _tc3 = st.columns(3)
+            _tc1.number_input(
+                "Critical threshold", value=float(ALERT_THRESHOLDS.get("Critical", 0.85)),
+                disabled=True, key="gov_th_critical",
+            )
+            _tc2.number_input(
+                "High threshold", value=float(ALERT_THRESHOLDS.get("High", 0.70)),
+                disabled=True, key="gov_th_high",
+            )
+            _tc3.number_input(
+                "Medium threshold", value=float(ALERT_THRESHOLDS.get("Medium", 0.50)),
+                disabled=True, key="gov_th_medium",
+            )
+            st.caption("Config managed in `utils/constants.py`. Editable wiring is out of scope for this demo.")
