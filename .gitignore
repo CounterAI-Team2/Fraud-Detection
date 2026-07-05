@@ -12,6 +12,7 @@ output/model_bundle.rds
 
 __pycache__/
 *.pyc
+*.tmp.*
 
 .venv/
 .streamlit/config.toml
