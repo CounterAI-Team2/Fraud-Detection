@@ -916,7 +916,8 @@ def _fuzzy_sanctions_review_dialog() -> None:
 _sync = st.session_state.get("mas_sync_result") or get_last_sync() or {}
 _sync_status = _sync.get("status", "unknown")
 _sync_count  = _sync.get("name_count", 0)
-_sync_at     = _sync.get("fetched_at", "—")
+_sync_at_raw = _sync.get("fetched_at", "")
+_sync_at     = _sync_at_raw[:16].replace("T", " ") if _sync_at_raw else "—"
 _STATUS_META = {
     "ok":           ("#4caf50", "Up to date",  "All sanctions lists synced successfully."),
     "skipped":      ("#4da6ff", "Skipped",     "Lists already up to date — no changes pulled."),
@@ -933,7 +934,7 @@ with st.container(border=True):
         unsafe_allow_html=True,
     )
     _b2.markdown(
-        f"**MAS Sanctions Lists** &nbsp;"
+        f"**Sanctions Lists** &nbsp;"
         f"<span style='color:#888;font-size:12px'>Last synced: {_sync_at}"
         f" &nbsp;·&nbsp; {_sync_count:,} screened names</span>  \n"
         f"<span style='color:#666;font-size:12px'>{_b_desc}</span>",
@@ -1481,5 +1482,5 @@ with _tab_sanctions:
 if st.session_state.get("kyc_view_customer_id"):
     _customer_detail_dialog(st.session_state["kyc_view_customer_id"])
 
-if st.session_state.get("kyc_fuzzy_sanctions_queue"):
-    _fuzzy_sanctions_review_dialog()
+# if st.session_state.get("kyc_fuzzy_sanctions_queue"):
+#     _fuzzy_sanctions_review_dialog()

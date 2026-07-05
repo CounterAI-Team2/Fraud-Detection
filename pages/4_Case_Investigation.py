@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import altair as alt
+import math
 import pandas as pd
 import streamlit as st
 
@@ -20,6 +22,7 @@ from utils.audit_logger import log_action
 from utils.constants import (
     ALERT_STATUS_DISMISSED,
     CASE_ACTION_ROLES,
+    CASE_RESOLVE_ROLES,
     CASE_STATUSES,
     CASE_STATUS_ESCALATED,
     CASE_STATUS_IN_REVIEW,
@@ -78,6 +81,7 @@ if rows.empty:
 selected_txn  = rows.iloc[0]
 analyst_id, actor_role = get_current_analyst()
 _can_action_case = can_act(actor_role, CASE_ACTION_ROLES)
+_can_resolve_case = can_act(actor_role, CASE_RESOLVE_ROLES)
 _read_only = is_read_only(actor_role)
 if not _can_action_case:
     st.info(
@@ -314,10 +318,73 @@ with st.container(border=True):
         st.info("No related transactions found in the ±30 day window.")
     else:
         _hist = related.copy()
-        _hist["_date"] = pd.to_datetime(_hist["Date"], errors="coerce")
-        _hist = _hist.dropna(subset=["_date"]).sort_values("_date")
+        _hist["_datetime"] = pd.to_datetime(
+            _hist["Date"].astype(str) + " " + _hist["Time"].astype(str),
+            errors="coerce",
+        )
+        _hist = _hist.dropna(subset=["_datetime"]).sort_values("_datetime")
         if not _hist.empty:
-            st.line_chart(_hist.set_index("_date")["Amount"], use_container_width=True)
+            _hist["_amount_fmt"]   = _hist["Amount"].apply(lambda x: f"${x:,.0f}")
+            _hist["_datetime_str"] = _hist["_datetime"].dt.strftime("%Y-%m-%d %H:%M")
+
+            _color_scale = alt.Scale(
+                domain=["Low", "Medium", "High", "Critical"],
+                range=["#66bb6a", "#fb8c00", "#f44336", "#b71c1c"],
+            )
+            _x_enc = alt.X(
+                "_datetime:T", title="Date / Time",
+                axis=alt.Axis(format="%b %d %H:%M", labelAngle=-30),
+            )
+            _amt_min   = _hist["Amount"].min()
+            _amt_max   = _hist["Amount"].max()
+            _amt_range = _amt_max - _amt_min
+            if _amt_range > 0:
+                _raw_step  = _amt_range / 5
+                _mag       = 10 ** math.floor(math.log10(_raw_step))
+                _ratio     = _raw_step / _mag
+                _step      = (_mag       if _ratio <= 1
+                              else 2 * _mag if _ratio <= 2
+                              else 5 * _mag if _ratio <= 5
+                              else 10 * _mag)
+                _y_scale = alt.Scale(domain=[
+                    math.floor(_amt_min / _step) * _step,
+                    math.ceil(_amt_max  / _step) * _step,
+                ])
+            else:
+                _y_scale = alt.Scale(zero=False, nice=True)
+            _y_enc = alt.Y("Amount:Q", title="Amount ($)", scale=_y_scale)
+            _color_enc = alt.Color(
+                "risk_tier:N", scale=_color_scale, legend=alt.Legend(title="Risk Tier"),
+            )
+            _tooltip = [
+                alt.Tooltip("transaction_id:N",  title="Transaction ID"),
+                alt.Tooltip("_amount_fmt:N",     title="Amount"),
+                alt.Tooltip("_datetime_str:N",   title="Date / Time"),
+                alt.Tooltip("risk_score:Q",      title="Risk Score", format=".3f"),
+                alt.Tooltip("risk_tier:N",       title="Risk Tier"),
+                alt.Tooltip("Receiver_account:N", title="Receiver Account"),
+            ]
+
+            _base = alt.Chart(_hist).mark_point(filled=True, size=80).encode(
+                x=_x_enc, y=_y_enc, color=_color_enc, tooltip=_tooltip,
+            )
+
+            _sel_df = _hist[_hist["transaction_id"].astype(str) == str(selected_txn_id)]
+            if not _sel_df.empty:
+                _outer = alt.Chart(_sel_df).mark_point(
+                    filled=False, size=500, opacity=0.15, strokeWidth=2,
+                ).encode(x=_x_enc, y=_y_enc, color=_color_enc)
+                _inner = alt.Chart(_sel_df).mark_point(
+                    filled=False, size=250, opacity=0.40, strokeWidth=2,
+                ).encode(x=_x_enc, y=_y_enc, color=_color_enc)
+                _centre = alt.Chart(_sel_df).mark_point(filled=True, size=80).encode(
+                    x=_x_enc, y=_y_enc, color=_color_enc, tooltip=_tooltip,
+                )
+                _chart = alt.layer(_base, _outer, _inner, _centre).properties(height=320)
+            else:
+                _chart = _base.properties(height=320)
+
+            st.altair_chart(_chart, use_container_width=True)
 
         st.dataframe(
             related[[
@@ -373,12 +440,15 @@ with st.container(border=True):
         index=1 if existing_case.get("status") == CASE_STATUS_IN_REVIEW else 0,
     )
     notes = st.text_area("Investigation notes", value=existing_case.get("notes", ""), height=100)
-    outcome_reason = st.text_input(
-        "Resolution reason (required if resolving without STR)",
-        value=existing_case.get("resolution", ""),
-    )
+    outcome_reason = existing_case.get("resolution", "")
+    if _can_resolve_case:
+        outcome_reason = st.text_input(
+            "Resolution reason (required if resolving without STR)",
+            value=outcome_reason,
+        )
     attachment_names = st.text_input(
-        "Attachments (comma-separated)", value=existing_case.get("attachment_names", ""),
+        "Supporting document references (e.g. case-file IDs, folder paths)",
+        value=existing_case.get("attachment_names", ""),
     )
 
     if st.button(
@@ -440,9 +510,14 @@ with st.container(border=True):
             st.session_state["cdd_mode"] = "ECDD"
             st.switch_page("pages/9_CDD_Review.py")
 
+    if _can_action_case and not _can_resolve_case:
+        st.info(
+            "Document your findings in the notes above and assign the case for Senior Investigator review. "
+            "Closing or resolving a case requires the Senior Investigator role."
+        )
     if st.button(
         "Close Case", use_container_width=True,
-        disabled=not _can_action_case,
+        disabled=not _can_resolve_case,
     ):
         updated_case = update_case_record(
             existing_case["case_id"],
@@ -476,7 +551,7 @@ with st.container(border=True):
 
     if st.button(
         "Resolve — No STR Required", use_container_width=True,
-        disabled=not _can_action_case,
+        disabled=not _can_resolve_case,
     ):
         if not outcome_reason.strip():
             st.error("Please provide a resolution reason.")

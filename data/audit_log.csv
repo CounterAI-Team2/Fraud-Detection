@@ -16947,3 +16947,11 @@ timestamp,action,transaction_id,details,analyst_id
 2026-06-08T14:45:23.874364+00:00,alert_escalated,8799,case_id=CDD-D76F7B03; risk_tier=High,John.Doe
 2026-06-08T14:45:38.237583+00:00,case_escalated_to_str,8799,case_id=CDD-D76F7B03; cdd_level=Simplified,John.Doe
 2026-06-08T14:47:29.702956+00:00,str_submitted_l1,8799,str_id=STR-B459254E,John.Doe
+2026-07-05T03:44:03.203696+00:00,alert_dismissed,8799,rf_prediction=0; reason=False positive,alice.analyst
+2026-07-05T03:44:12.213093+00:00,alert_escalated,1222,case_id=CDD-3EE21852; risk_tier=High,alice.analyst
+2026-07-05T03:49:40.220282+00:00,case_resolved_no_str,1222,case_id=CDD-3EE21852; reason=nan,alice.analyst
+2026-07-05T04:42:30.779445+00:00,case_escalated_to_str,1222,case_id=CDD-3EE21852; cdd_level=Simplified,alice.analyst
+2026-07-05T04:44:24.245276+00:00,str_submitted_l1,1222,str_id=STR-827BDA12,alice.analyst
+2026-07-05T04:44:54.854582+00:00,str_approved_l1,1222,str_id=STR-827BDA12,alice.senior
+2026-07-05T04:45:40.535456+00:00,case_resolved_str_filed,1222,case_id=CDD-3EE21852; reference_number=nan,alice.mlro
+2026-07-05T04:45:40.537463+00:00,str_archived,1222,reference_number=nan,alice.mlro
