@@ -1469,8 +1469,13 @@ def set_customer_risk_status(
 
     if is_pep is True:
         updates["IsPEP"] = "Yes"
+        updates["RiskIndicators"] = _append_indicator(
+            str(row.get("RiskIndicators", "") or ""), "PEP"
+        )
     elif is_pep is False:
         updates["IsPEP"] = "No"
+        _parts = [p.strip() for p in str(row.get("RiskIndicators", "") or "").split(";") if p.strip() and p.strip() != "PEP"]
+        updates["RiskIndicators"] = "; ".join(_parts)
 
     return update_kyc_record(customer_id, updates)
 

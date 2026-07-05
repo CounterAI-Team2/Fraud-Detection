@@ -16,6 +16,7 @@ __pycache__/
 
 .venv/
 .streamlit/config.toml
+audit_log.csv
 data/audit_log_v2.csv
 data/cases.csv
 data/customers.csv
